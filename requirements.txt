@@ -3,6 +3,7 @@
 numpy>=1.23
 pandas>=1.5
 matplotlib>=3.6
+scipy>=1.9          # diagnostics: Hungarian assignment
 # development / tests
 pytest>=7
 nbformat>=5
