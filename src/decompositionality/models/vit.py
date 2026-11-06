@@ -1,0 +1,94 @@
+"""Simple patch Transformer (ViT) on the categorical 6x6 grid with 2x2 patches, and its
+weight-tied looped variant.
+
+``looped_vit`` is OUR controlled weight-tied baseline ("Looped ViT (tied baseline)"):
+the same ViT with one shared block applied six times. It is NOT the published hybrid
+LoopViT system (no ConvGLU, local convolutions, test-time training or entropy-based
+stopping).
+"""
+from __future__ import annotations
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from .. import tokenization as T
+from .common import BlockStack, GridModel, PreNormBlock, cell_ce_per_example, gpt_init, key_padding_mask
+from .transformer import TransformerAR, TransformerConfig
+
+PATCH = 2
+NP = 3  # patches per side
+
+
+def patchify(t: torch.Tensor) -> torch.Tensor:
+    """[B,6,6,*F] -> [B,9,4,*F]; patches row-major over the 3x3 patch grid,
+    cells within a patch row-major (dr, dc)."""
+    B, rest = t.shape[0], t.shape[3:]
+    t = t.reshape(B, NP, PATCH, NP, PATCH, *rest)          # B, pr, dr, pc, dc, ...
+    t = t.permute(0, 1, 3, 2, 4, *range(5, 5 + len(rest)))  # B, pr, pc, dr, dc, ...
+    return t.reshape(B, NP * NP, PATCH * PATCH, *rest)
+
+
+def unpatchify(t: torch.Tensor) -> torch.Tensor:
+    """Inverse of :func:`patchify`: [B,9,4,*F] -> [B,6,6,*F]."""
+    B, rest = t.shape[0], t.shape[3:]
+    t = t.reshape(B, NP, NP, PATCH, PATCH, *rest)           # B, pr, pc, dr, dc, ...
+    t = t.permute(0, 1, 3, 2, 4, *range(5, 5 + len(rest)))  # B, pr, dr, pc, dc, ...
+    return t.reshape(B, 6, 6, *rest)
+
+
+class ViT(GridModel):
+    kind = "parallel"
+    loss_label = "parallel cell CE"
+
+    def __init__(self, cfg: TransformerConfig, model_id: str = "vit"):
+        super().__init__()
+        self.cfg, self.model_id = cfg, model_id
+        d = cfg.d_model
+        self.op_emb = nn.Embedding(4, d)              # 3 atomic ops + PAD (PAD keys are masked)
+        self.patch_proj = nn.Linear(PATCH * PATCH * 10, d)  # 2x2x10 one-hot, order preserved
+        self.type_emb = nn.Embedding(2, d)
+        self.slot_emb = nn.Embedding(3, d)
+        self.prow_emb = nn.Embedding(NP, d)
+        self.pcol_emb = nn.Embedding(NP, d)
+        self.stack = BlockStack(cfg.depth, cfg.tied, lambda: PreNormBlock(d, cfg.n_heads, cfg.d_ff, cfg.dropout))
+        self.ln_f = nn.LayerNorm(d)
+        self.head = nn.Linear(d, PATCH * PATCH * 10)  # shared head: 4 cells x 10 logits per patch
+        gpt_init(self)
+        p = torch.arange(NP * NP)
+        self.register_buffer("prow", p // NP, persistent=False)
+        self.register_buffer("pcol", p % NP, persistent=False)
+        self.register_buffer("slots", torch.arange(3), persistent=False)
+        self.register_buffer("types", torch.tensor([0] * 3 + [1] * 9), persistent=False)
+
+    def logits(self, batch) -> torch.Tensor:
+        ops, x = batch["ops"].long(), batch["x"].long()
+        B = x.shape[0]
+        onehot = F.one_hot(x, 10).to(self.patch_proj.weight.dtype)        # [B,6,6,10]
+        patches = patchify(onehot).reshape(B, NP * NP, -1)                # [B,9,40]
+        h_ops = self.op_emb(ops) + self.slot_emb(self.slots)
+        h_patch = self.patch_proj(patches) + self.prow_emb(self.prow) + self.pcol_emb(self.pcol)
+        h = torch.cat([h_ops, h_patch], dim=1) + self.type_emb(self.types)  # [B,12,d]
+        valid = torch.cat([ops != 3, torch.ones(B, NP * NP, dtype=torch.bool, device=x.device)], dim=1)
+        h = self.stack(h, valid[:, None, None, :])
+        out = self.head(self.ln_f(h[:, 3:])).view(B, NP * NP, PATCH * PATCH, 10)
+        return unpatchify(out).reshape(B, 36, 10)
+
+    def training_loss(self, batch):
+        return cell_ce_per_example(self.logits(batch), batch["y"].reshape(-1, 36)).mean(), {}
+
+    def val_cell_ce(self, batch):
+        return cell_ce_per_example(self.logits(batch), batch["y"].reshape(-1, 36))
+
+    @torch.no_grad()
+    def predict(self, batch):
+        pred = self.logits(batch).argmax(dim=-1)
+        return {"pred": pred, "valid": torch.ones(pred.shape[0], dtype=torch.bool, device=pred.device)}
+
+    def cost_info(self):
+        return {"block_applications_per_forward": self.cfg.depth, "core_calls_per_forward": self.cfg.depth,
+                "input_tokens": "12 (3 op slots + 9 patches)", "decoded_output_steps": 1,
+                "decoding": "parallel argmax"}
+
+    shared_core_parameters = TransformerAR.shared_core_parameters
+    untied_equivalent_parameters = TransformerAR.untied_equivalent_parameters

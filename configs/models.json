@@ -1,0 +1,208 @@
+{
+ "transformer_ar": {
+  "model_id": "transformer_ar",
+  "display_name": "Transformer AR",
+  "kind": "ar",
+  "unique_params": 10701331,
+  "shared_core_params": null,
+  "untied_equivalent_params": null,
+  "loss_label": "AR teacher-forced NLL (36 answer cells + EOS)",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "79 (teacher forcing); prompt 43",
+  "decoded_output_steps": 36,
+  "decoding": "greedy free-running (+1 EOS diagnostic step)",
+  "config": {
+   "d_model": 384,
+   "n_heads": 6,
+   "d_ff": 1536,
+   "depth": 6,
+   "tied": false,
+   "dropout": 0.0
+  }
+ },
+ "looped_transformer_ar": {
+  "model_id": "looped_transformer_ar",
+  "display_name": "Looped Transformer AR (tied)",
+  "kind": "ar",
+  "unique_params": 1829011,
+  "shared_core_params": 1774464,
+  "untied_equivalent_params": 10701331,
+  "loss_label": "AR teacher-forced NLL (36 answer cells + EOS)",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "79 (teacher forcing); prompt 43",
+  "decoded_output_steps": 36,
+  "decoding": "greedy free-running (+1 EOS diagnostic step)",
+  "config": {
+   "d_model": 384,
+   "n_heads": 6,
+   "d_ff": 1536,
+   "depth": 6,
+   "tied": true,
+   "dropout": 0.0
+  }
+ },
+ "transformer_encoder": {
+  "model_id": "transformer_encoder",
+  "display_name": "Transformer encoder",
+  "kind": "parallel",
+  "unique_params": 10663306,
+  "shared_core_params": null,
+  "untied_equivalent_params": null,
+  "loss_label": "parallel cell CE",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "39 (3 op slots + 36 cells)",
+  "decoded_output_steps": 1,
+  "decoding": "parallel argmax",
+  "config": {
+   "d_model": 384,
+   "n_heads": 6,
+   "d_ff": 1536,
+   "depth": 6,
+   "tied": false,
+   "dropout": 0.0
+  }
+ },
+ "looped_transformer_encoder": {
+  "model_id": "looped_transformer_encoder",
+  "display_name": "Looped Transformer encoder (tied)",
+  "kind": "parallel",
+  "unique_params": 1790986,
+  "shared_core_params": 1774464,
+  "untied_equivalent_params": 10663306,
+  "loss_label": "parallel cell CE",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "39 (3 op slots + 36 cells)",
+  "decoded_output_steps": 1,
+  "decoding": "parallel argmax",
+  "config": {
+   "d_model": 384,
+   "n_heads": 6,
+   "d_ff": 1536,
+   "depth": 6,
+   "tied": true,
+   "dropout": 0.0
+  }
+ },
+ "vit": {
+  "model_id": "vit",
+  "display_name": "ViT (2x2 patches)",
+  "kind": "parallel",
+  "unique_params": 10684456,
+  "shared_core_params": null,
+  "untied_equivalent_params": null,
+  "loss_label": "parallel cell CE",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "12 (3 op slots + 9 patches)",
+  "decoded_output_steps": 1,
+  "decoding": "parallel argmax",
+  "config": {
+   "d_model": 384,
+   "n_heads": 6,
+   "d_ff": 1536,
+   "depth": 6,
+   "tied": false,
+   "dropout": 0.0
+  }
+ },
+ "looped_vit": {
+  "model_id": "looped_vit",
+  "display_name": "Looped ViT (tied baseline)",
+  "kind": "parallel",
+  "unique_params": 1812136,
+  "shared_core_params": 1774464,
+  "untied_equivalent_params": 10684456,
+  "loss_label": "parallel cell CE",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "12 (3 op slots + 9 patches)",
+  "decoded_output_steps": 1,
+  "decoding": "parallel argmax",
+  "config": {
+   "d_model": 384,
+   "n_heads": 6,
+   "d_ff": 1536,
+   "depth": 6,
+   "tied": true,
+   "dropout": 0.0
+  }
+ },
+ "trm": {
+  "model_id": "trm",
+  "display_name": "TRM-adapted",
+  "kind": "trm",
+  "unique_params": 9938560,
+  "shared_core_params": 9912320,
+  "untied_equivalent_params": null,
+  "loss_label": "TRM deep-supervision loss (mean cell CE over S refinements)",
+  "block_applications_per_forward": 24,
+  "core_calls_per_forward": 12,
+  "grad_block_applications_per_forward": 12,
+  "input_tokens": "39 (3 op slots + 36 cells)",
+  "decoded_output_steps": 1,
+  "decoding": "parallel argmax of final refinement (S=2 refinements)",
+  "config": {
+   "d_model": 640,
+   "n_heads": 8,
+   "d_ff": 1728,
+   "n_core_layers": 2,
+   "n_latent": 2,
+   "T_cycles": 2,
+   "S_refinements": 2,
+   "rms_eps": 1e-05
+  }
+ },
+ "rescnn_film": {
+  "model_id": "rescnn_film",
+  "display_name": "ResCNN-FiLM",
+  "kind": "parallel",
+  "unique_params": 10006826,
+  "shared_core_params": null,
+  "untied_equivalent_params": null,
+  "loss_label": "parallel cell CE",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "6x6 grid, 12 channels",
+  "decoded_output_steps": 1,
+  "decoding": "parallel argmax",
+  "config": {
+   "channels": 288,
+   "n_blocks": 6,
+   "groups": 8,
+   "cond": {
+    "op_emb_dim": 64,
+    "hidden": 256
+   }
+  }
+ },
+ "unet_film": {
+  "model_id": "unet_film",
+  "display_name": "U-Net-FiLM",
+  "kind": "parallel",
+  "unique_params": 10301642,
+  "shared_core_params": null,
+  "untied_equivalent_params": null,
+  "loss_label": "parallel cell CE",
+  "block_applications_per_forward": 6,
+  "core_calls_per_forward": 6,
+  "input_tokens": "6x6 grid, 12 channels (one 3x3 level)",
+  "decoded_output_steps": 1,
+  "decoding": "parallel argmax",
+  "config": {
+   "c_high": 192,
+   "c_low": 384,
+   "enc_blocks": 2,
+   "mid_blocks": 2,
+   "dec_blocks": 2,
+   "groups": 8,
+   "cond": {
+    "op_emb_dim": 64,
+    "hidden": 256
+   }
+  }
+ }
+}

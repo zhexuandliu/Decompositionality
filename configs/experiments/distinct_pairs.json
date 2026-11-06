@@ -1,0 +1,53 @@
+{
+ "experiment": "distinct_pairs",
+ "models": [
+  "transformer_ar",
+  "looped_transformer_ar",
+  "transformer_encoder",
+  "looped_transformer_encoder",
+  "vit",
+  "looped_vit",
+  "trm",
+  "rescnn_film",
+  "unet_film"
+ ],
+ "n_val_grids": 300,
+ "n_test_grids": 1000,
+ "val_subset_grids": 32,
+ "resume": true,
+ "train": {
+  "seed": 42,
+  "optimizer_steps": 5000,
+  "effective_batch_size": 256,
+  "lr": 0.0003,
+  "min_lr": 3e-05,
+  "weight_decay": 0.01,
+  "betas": [
+   0.9,
+   0.95
+  ],
+  "warmup_steps": 250,
+  "grad_clip": 1.0,
+  "val_every": 250,
+  "log_every": 25,
+  "device": "auto",
+  "dtype": "auto",
+  "microbatch_size": null,
+  "max_microbatch_size": 256,
+  "cpu_microbatch_size": 32,
+  "eval_batch_size": null,
+  "activation_checkpointing": false,
+  "tf32": true
+ },
+ "model_overrides": {},
+ "train_strings": [
+  "AB",
+  "AC",
+  "BA",
+  "BC",
+  "CA",
+  "CB"
+ ],
+ "data_version": "decomp-gridops-v1",
+ "note": "Reference copy of the default FULL configuration (generated from src/decompositionality/config.py; the code is authoritative). The two experiments differ only in 'experiment'/'train_strings' and their output directory."
+}

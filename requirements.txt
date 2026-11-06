@@ -1,0 +1,8 @@
+# Lightweight dependencies. PyTorch (>=2.0) is expected to be preinstalled with CUDA
+# (Google Colab ships it); it is deliberately not listed to avoid reinstalling the CUDA stack.
+numpy>=1.23
+pandas>=1.5
+matplotlib>=3.6
+# development / tests
+pytest>=7
+nbformat>=5

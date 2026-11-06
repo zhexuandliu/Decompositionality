@@ -1,0 +1,20 @@
+# generated results, checkpoints, archives
+results/
+outputs/
+*.pt
+*.ckpt
+*.zip
+*.npz
+# python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+# notebooks
+.ipynb_checkpoints/
+# environment / secrets
+.env
+*.token
+.DS_Store

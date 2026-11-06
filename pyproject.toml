@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "decompositionality"
+version = "0.1.0"
+description = "Systematic generalization of operation-sequence execution on synthetic 6x6 grids (controlled study)"
+readme = "README.md"
+requires-python = ">=3.9"
+# torch is intentionally NOT pinned/installed here: use the runtime's CUDA build (e.g. Colab's).
+dependencies = ["numpy>=1.23", "pandas>=1.5", "matplotlib>=3.6"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7", "nbformat>=5"]
+
+[project.scripts]
+decomp = "decompositionality.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
