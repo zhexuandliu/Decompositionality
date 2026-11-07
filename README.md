@@ -651,6 +651,70 @@ to resume.
 this is not a pure mask or length ablation. Historical PAD runs (04–09) use a different serialization and CNN adapter,
 so they are not paired with these runs.
 
+## 16. Operation-count extrapolation in the identity format (notebooks 12/13; Transformer AR + Looped AR)
+
+[![Open 12](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/12_identity_train02_ar_extrapolation.ipynb)
+[`notebooks/12_identity_train02_ar_extrapolation.ipynb`](notebooks/12_identity_train02_ar_extrapolation.ipynb) ·
+[![Open 13](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/13_identity_train023_ar_extrapolation.ipynb)
+[`notebooks/13_identity_train023_ar_extrapolation.ipynb`](notebooks/13_identity_train023_ar_extrapolation.ipynb)
+
+**Setup.**
+* The model, serializer and recipe are exactly those of the successful notebook-10 identity run: five visible
+  operation tokens, unused slots filled with the learnable `<identity>`, random ordered placement, no PAD, learned
+  positions, 82 AR tokens.
+* The model hashes match notebook 10: `b8c7a0906c8420d2` for transformer_ar (10,702,868 parameters) and
+  `76a3940b2ffbff78` for looped_transformer_ar (1,830,548 parameters).
+* Only the training support over k (the number of A/B/C tokens) changes. Extrapolation is therefore in k, not in
+  sequence length.
+
+| experiment | train k | records per update | records over 5000 updates | held-out k | logical words / physical patterns |
+|---|---|---|---|---|---|
+| train02 | 0, 2 | 128 + 128 | 640,000 each | 1, 3, 4, 5 | 10 / 91 |
+| train023 | 0, 2, 3 | 85 each + 1 rotating (0→2→3) | 426,667 / 426,667 / 426,666 | 1, 4, 5 | 37 / 361 |
+
+**Records and initialisation.**
+* Records are indexed within k (`record(seed, k, j)`), so the common k=0/2 records of the two experiments come from
+  one per-k stream. Their exposure counts and batch positions still differ.
+* train023 is NOT train02 plus triples: at an equal total budget it replaces some k=0/2 exposure with k=3.
+* Each architecture starts from identical initial weights in both experiments.
+
+**Selection.** Validation uses 300 grids at each trained k (600 / 900 records). The common k=0/2 validation records
+are identical across the two experiments. The checkpoint with the lowest answer-digit CE, macro-averaged over the
+trained k, is selected.
+
+**Test.** The common notebook-10 manifest is used for all four runs:
+
+| k | words | records |
+|---|---|---|
+| 0 | 1 | 1,000 |
+| 1 | 3 (× 5 placements) | 15,000 |
+| 2 | 9 | 9,000 |
+| 3 | 27 | 27,000 |
+| 4 | 81 | 81,000 |
+| 5 | 243 | 243,000 |
+
+That is 376,000 records per run. Each k is reported separately, with integer counts and a seen / HELD OUT label for
+that run.
+
+**Transformation coverage (post-hoc).** train02 has 9 distinct training transformations and train023 has 30. Words
+whose transformation is in the training support, per k = 0..5:
+* train02: 1/1, 0/3, 9/9, 0/27, 38/81, 0/243
+* train023: 1/1, 3/3, 9/9, 27/27, 38/81, 162/243
+
+**Even-count ambiguity (post-hoc).** H = a shift by 3 rows and 3 columns is an involution that commutes with A, B and
+C. So H∘A, H∘B, H∘C reproduce the true mapping for every even k and differ for every odd k. The train02 data alone
+therefore do not rule this alternative out; k = 3 supervision does. The notebooks report odd-k agreement with H(target)
+descriptively, with overlap counts. It is never a training signal.
+
+**Outputs.** `/content/drive/MyDrive/decompositionality_results/identity_ar_count_extrapolation/` contains:
+* `manifests/`
+* `train02/seed_42/<model>` and `train023/seed_42/<model>`
+* `artifact_index.json`
+* `comparisons/seed_42/`
+
+**Running.** Each notebook trains both models; rerun it to resume. After both notebooks finish, rerunning only the
+analysis cell gives the joint comparison. One seed; descriptive only.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

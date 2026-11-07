@@ -88,8 +88,9 @@ def evaluation_complete(cfg, model_id, rc) -> bool:
             and (eval_dir(cfg, model_id) / "test_predictions.npz").exists())
 
 
-def metrics_tables(arr: Dict[str, np.ndarray], condition: str):
-    """Integer exact successes / denominators by word, k, singleton operation (x position for identity)."""
+def metrics_tables(arr: Dict[str, np.ndarray], condition: str, train_ks=V.K_VALUES):
+    """Integer exact successes / denominators by word, k, singleton operation (x position for identity).
+    The seen / HELD OUT label of each k comes from the experiment's training support ``train_ks``."""
     import pandas as pd
     P = arr["pred"].reshape(len(arr["pred"]), 36).astype(np.int16)
     Y = arr["target"].reshape(len(arr["target"]), 36).astype(np.int16)
@@ -104,7 +105,7 @@ def metrics_tables(arr: Dict[str, np.ndarray], condition: str):
                           "cell_acc": g.cell.mean(), "invalid_rate": g.invalid.mean()})
     by_word = df[df.kind == "seen"].groupby("string", sort=False).apply(agg).reset_index()
     by_k = df.groupby("k").apply(agg).reset_index()
-    by_k["status"] = np.where(by_k.k == 1, "HELD OUT (singletons)", "seen (trained lengths, new grids)")
+    by_k["status"] = np.where(by_k.k.isin(list(train_ks)), "seen support (new grids)", "HELD OUT")
     singles = df[df.kind == "single"]
     if condition == "identity":
         by_single = singles.groupby(["string", "position"]).apply(agg).reset_index()
@@ -189,7 +190,9 @@ def evaluate_idvar_model(model_id: str, ctx: Context, log=print, chunk_grids: in
         arrays["eos_ok"] = cat("eos_ok")
     pfile = edir / "test_predictions.npz"
     atomic_write_bytes(pfile, _npz_bytes(**arrays))
-    by_word, by_k, by_single, per_op, summ = metrics_tables(arrays, cond)
+    from .idext import is_idext, train_ks as ext_ks
+    tks = ext_ks(cfg.experiment) if is_idext(cfg.experiment) else V.K_VALUES
+    by_word, by_k, by_single, per_op, summ = metrics_tables(arrays, cond, tks)
     for name, t in (("test_by_word", by_word), ("test_by_k", by_k), ("test_singletons", by_single),
                     ("test_singletons_per_op", per_op)):
         t.insert(0, "model", model_id)
@@ -204,7 +207,7 @@ def evaluate_idvar_model(model_id: str, ctx: Context, log=print, chunk_grids: in
                "repo_commit": environment_info(ctx.repo_dir)["repo_commit"]}
     atomic_write_json(edir / "eval_summary.json", summary)
     atomic_write_json(edir / "ARTIFACT.json", {
-        "condition": cond, "model": model_id, "complete": len(pred) == summary["expected_records"],
+        "condition": cond, "model": model_id, "experiment": cfg.experiment, "seed": tc.seed, "train_ks": list(tks), "complete": len(pred) == summary["expected_records"],
         "predictions": str(pfile), "predictions_sha256": sha256_file(pfile), "n_records": int(len(pred)),
         "expected_records": summary["expected_records"], "chunks": len(starts), "selected_step": ck["step"],
         "config_hash": rc["config_hash"], "manifest_hash": ctx.manifests.manifest_hash})

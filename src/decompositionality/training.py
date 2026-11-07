@@ -186,8 +186,9 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     base.update(cfg.model_overrides.get(model_id) or {})
     if cfg.n_slots != 3:
         base["n_slots"] = cfg.n_slots
+    from .idext import is_idext
     from .idvar import condition_of, is_idvar
-    if is_idvar(cfg.experiment):
+    if is_idvar(cfg.experiment) or is_idext(cfg.experiment):
         # identical parameter shapes in BOTH conditions: <identity> in the vocabulary, max-size position tables,
         # the variable-length CNN conditioner; only the accepted instruction format differs.
         base["op_format"] = "variable" if condition_of(cfg.experiment) == "variable_length" else "fixed"
@@ -241,6 +242,17 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
                            "words": "uniform over {A,B,C}^k", "slots": "uniform ordered k-subset of 5"}
         d["positions"] = "learned absolute 1D positions (identity: physical slots; variable: contiguous)"
         d["checkpoint_selection"] = "mean final-answer digit CE over the 5 equal-size validation k groups"
+    from .idext import IDEXT_DATA_VERSION, is_idext, per_update_counts, train_ks
+    if is_idext(cfg.experiment):
+        d["data_version"] = IDEXT_DATA_VERSION
+        d["n_slots"] = cfg.n_slots
+        d["condition"] = "identity (five visible slots, <identity> fillers, random ordered placement)"
+        d["train_ks"] = list(train_ks(cfg.experiment))
+        d["k_schedule"] = {"per_update_first_two": [per_update_counts(train_ks(cfg.experiment), cfg.train.effective_batch_size, s)
+                                                    for s in (0, 1)],
+                           "records": "indexed within k: record(seed, k, j)", "words": "uniform over {A,B,C}^k",
+                           "slots": "uniform ordered k-subset of 5"}
+        d["checkpoint_selection"] = "mean answer-digit CE (EOS excluded) over the allowed validation k groups"
     from .mixed import COMPACT_DATA_VERSION, LAYOUT_VERSION, is_compact
     if is_compact(cfg.experiment):
         d["data_version"] = COMPACT_DATA_VERSION
@@ -365,7 +377,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    if cfg.is_idvar:
+    if cfg.is_idext:
+        from .idext import ExtStream
+        stream = ExtStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
+    elif cfg.is_idvar:
         from .idvar import IdVarStream, condition_of
         stream = IdVarStream(tc.seed, tc.effective_batch_size, condition_of(cfg.experiment), manifests.heldout_bytes)
     elif cfg.is_mixed:

@@ -44,6 +44,9 @@ def is_idvar(experiment: str) -> bool:
 
 
 def condition_of(experiment: str) -> str:
+    from .idext import is_idext
+    if is_idext(experiment):          # count-extrapolation experiments use the identity format
+        return "identity"
     return IDVAR_EXPERIMENTS[experiment]
 
 
