@@ -26,9 +26,12 @@ class TransformerConfig:
     n_slots: int = 3         # operation slots (legacy 3; mixed-length experiments 5)
     sequence_pe: str = "learned"   # 1D sequence PE: "learned" (legacy) | "rope" | "sinusoidal" (both nontrainable)
     pe_base: float = 10000.0
+    identity_token: bool = False   # vocabulary includes the visible, learnable <identity> operation
+    op_format: str = "fixed"       # "fixed" (exactly n_slots op tokens) | "variable" (0..n_slots real tokens, no PAD)
 
     def __post_init__(self):
         assert self.sequence_pe in SEQUENCE_PE_CHOICES, self.sequence_pe
+        assert self.op_format in ("fixed", "variable"), self.op_format
 
 
 # ---------------------------------------------------------------------------
@@ -45,15 +48,16 @@ class TransformerAR(GridModel):
         d = cfg.d_model
         self.layout = T.ARLayout(cfg.n_slots)
         L = self.layout.length
-        self.tok_emb = nn.Embedding(T.VOCAB_SIZE, d)
-        if cfg.sequence_pe == "learned":          # legacy learned absolute 1D position table
+        V = T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.VOCAB_SIZE
+        self.tok_emb = nn.Embedding(V, d)
+        if cfg.sequence_pe == "learned":          # legacy learned absolute 1D position table (max-size)
             self.pos_emb = nn.Embedding(L, d)
         self.seg_emb = nn.Embedding(T.NUM_SEGMENTS, d)
         self.row_emb = nn.Embedding(7, d)  # 6 = not a grid token
         self.col_emb = nn.Embedding(7, d)
         self.stack = BlockStack(cfg.depth, cfg.tied, lambda: PreNormBlock(d, cfg.n_heads, cfg.d_ff, cfg.dropout))
         self.ln_f = nn.LayerNorm(d)
-        self.head = nn.Linear(d, T.VOCAB_SIZE)  # full vocabulary: non-digit outputs are possible (invalid)
+        self.head = nn.Linear(d, V)  # full vocabulary: non-digit outputs are possible (invalid)
         gpt_init(self)
         if cfg.sequence_pe != "learned":          # nontrainable; built after init so it consumes no RNG
             self.seq_pe = SequencePE(cfg.sequence_pe, L, d, d // cfg.n_heads, cfg.pe_base)
@@ -61,19 +65,33 @@ class TransformerAR(GridModel):
         for k, v in meta.items():
             self.register_buffer(f"meta_{k}", v, persistent=False)
         self.register_buffer("causal", torch.tril(torch.ones(L, L, dtype=torch.bool)), persistent=False)
+        self._meta_cache = {}
 
-    def forward_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
-        """tokens [B, L<=layout.length] laid out per the fixed layout -> logits [B, L, vocab].
-        Position metadata depends only on the index in the layout."""
+    def layout_for(self, n_ops: int):
+        return self.layout if n_ops == self.cfg.n_slots else T.ARLayout(n_ops)
+
+    def _meta(self, n_ops: int, device):
+        """Layout metadata (contiguous positions 0..L-1, segments, row/col) for an instruction of n_ops tokens."""
+        if n_ops == self.cfg.n_slots:
+            return {"pos": self.meta_pos, "seg": self.meta_seg, "row": self.meta_row, "col": self.meta_col}
+        key = (n_ops, str(device))
+        if key not in self._meta_cache:
+            self._meta_cache[key] = {k: v.to(device) for k, v in T.ARLayout(n_ops).metadata().items()}
+        return self._meta_cache[key]
+
+    def forward_tokens(self, tokens: torch.Tensor, n_ops: int = None) -> torch.Tensor:
+        """tokens [B, L] laid out per the layout of an ``n_ops``-token instruction (default: n_slots)
+        -> logits [B, L, vocab]. Position metadata depends only on the index in that layout."""
         B, L = tokens.shape
+        meta = self._meta(self.cfg.n_slots if n_ops is None else n_ops, tokens.device)
         cos = sin = None
         if self.cfg.sequence_pe == "learned":
-            h = (self.tok_emb(tokens) + self.pos_emb(self.meta_pos[:L]) + self.seg_emb(self.meta_seg[:L])
-                 + self.row_emb(self.meta_row[:L]) + self.col_emb(self.meta_col[:L]))
+            h = (self.tok_emb(tokens) + self.pos_emb(meta["pos"][:L]) + self.seg_emb(meta["seg"][:L])
+                 + self.row_emb(meta["row"][:L]) + self.col_emb(meta["col"][:L]))
         else:
-            pos = self.meta_pos[:L]            # absolute layout positions, identical in training and decoding
-            h = (self.tok_emb(tokens) + self.seg_emb(self.meta_seg[:L])
-                 + self.row_emb(self.meta_row[:L]) + self.col_emb(self.meta_col[:L]))
+            pos = meta["pos"][:L]              # absolute layout positions, identical in training and decoding
+            h = (self.tok_emb(tokens) + self.seg_emb(meta["seg"][:L])
+                 + self.row_emb(meta["row"][:L]) + self.col_emb(meta["col"][:L]))
             add = self.seq_pe.additive(pos)
             if add is not None:
                 h = h + add.to(h.dtype)
@@ -85,9 +103,10 @@ class TransformerAR(GridModel):
     def _teacher_forced(self, batch):
         """THE single next-token shift: logits at index t predict token t+1.
         Returns logits/targets for the 37 supervised positions (36 answer cells + EOS)."""
-        lay = self.layout
+        n = self.n_ops_of(batch["ops"])
+        lay = self.layout_for(n)
         seq = lay.serialize(batch["ops"], batch["x"], batch["y"])
-        logits = self.forward_tokens(seq[:, :-1])          # positions 0..len-2
+        logits = self.forward_tokens(seq[:, :-1], n)       # positions 0..len-2
         targets = seq[:, 1:]                               # tokens 1..len-1
         sl = slice(lay.idx_output, lay.idx_eos)            # logits OUTPUT..EOS-1 -> tokens first answer..EOS
         return logits[:, sl], targets[:, sl]
@@ -107,11 +126,13 @@ class TransformerAR(GridModel):
         """Greedy free-running decoding from the prefix ending at <OUTPUT>.
         The model never sees ground-truth answer tokens. Full-vocabulary argmax:
         any non-digit token among the 36 grid positions makes the grid invalid."""
-        seq = self.layout.prefix(batch["ops"], batch["x"])
-        P0 = self.layout.prefix_len
+        n = self.n_ops_of(batch["ops"])
+        lay = self.layout_for(n)
+        seq = lay.prefix(batch["ops"], batch["x"])        # the ACTUAL (possibly shorter) prefix ending at <OUTPUT>
+        P0 = lay.prefix_len
         n_steps = 36 + (1 if predict_eos else 0)
         for _ in range(n_steps):
-            nxt = self.forward_tokens(seq)[:, -1].argmax(dim=-1)
+            nxt = self.forward_tokens(seq, n)[:, -1].argmax(dim=-1)
             seq = torch.cat([seq, nxt[:, None]], dim=1)
         gen = seq[:, P0:P0 + 36]
         is_digit = gen < 10
@@ -147,7 +168,7 @@ class TransformerEncoder(GridModel):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         d = cfg.d_model
-        self.tok_emb = nn.Embedding(T.NONAR_VOCAB_SIZE, d)
+        self.tok_emb = nn.Embedding(T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.NONAR_VOCAB_SIZE, d)
         self.type_emb = nn.Embedding(2, d)   # 0 = operation slot, 1 = grid cell
         n = cfg.n_slots
         if cfg.sequence_pe == "learned":
@@ -168,21 +189,23 @@ class TransformerEncoder(GridModel):
         self.register_buffer("types", torch.tensor([0] * n + [1] * 36), persistent=False)
 
     def logits(self, batch) -> torch.Tensor:
-        n = self.cfg.n_slots
-        assert batch["ops"].shape[1] == n, f"expected {n} operation slots"
+        n = self.n_ops_of(batch["ops"])                               # actual op tokens (= n_slots unless variable)
+        N = self.cfg.n_slots
         tokens = T.grid_token_inputs(batch["ops"], batch["x"])          # [B, n+36]
+        types = torch.cat([self.types[:n], self.types[N:]])           # 0 for the n op tokens, 1 for the 36 cells
+        seq_pos = self.seq_pos[:n + 36]
         cos = sin = None
         if self.cfg.sequence_pe == "learned":
-            pos = torch.cat([self.slot_emb(self.slots), self.row_emb(self.rows) + self.col_emb(self.cols)], dim=0)
-            h = self.tok_emb(tokens) + self.type_emb(self.types) + pos
+            pos = torch.cat([self.slot_emb(self.slots[:n]), self.row_emb(self.rows) + self.col_emb(self.cols)], dim=0)
+            h = self.tok_emb(tokens) + self.type_emb(types) + pos
         else:
             rc = self.row_emb(self.rows) + self.col_emb(self.cols)
             pos = torch.cat([rc.new_zeros(n, rc.shape[-1]), rc], dim=0)  # spatial row/col for grid tokens only
-            h = self.tok_emb(tokens) + self.type_emb(self.types) + pos
-            add = self.seq_pe.additive(self.seq_pos)
+            h = self.tok_emb(tokens) + self.type_emb(types) + pos
+            add = self.seq_pe.additive(seq_pos)
             if add is not None:
                 h = h + add.to(h.dtype)
-            cos, sin = self.seq_pe.rotary(self.seq_pos)
+            cos, sin = self.seq_pe.rotary(seq_pos)
         h = self.stack(h, key_padding_mask(tokens, T.PAD_ID), cos, sin)  # no causal mask
         return self.head(self.ln_f(h[:, n:]))                          # [B,36,10]
 

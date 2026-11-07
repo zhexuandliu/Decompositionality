@@ -60,9 +60,12 @@ class TRMConfig:
     n_slots: int = 3            # operation slots (legacy 3; mixed-length experiments 5)
     sequence_pe: str = "learned"   # "learned" (legacy) | "rope" | "sinusoidal" (both nontrainable)
     pe_base: float = 10000.0
+    identity_token: bool = False   # vocabulary includes the visible, learnable <identity> operation
+    op_format: str = "fixed"       # "fixed" | "variable" (0..n_slots real op tokens; states sized to the actual length)
 
     def __post_init__(self):
         assert self.sequence_pe in SEQUENCE_PE_CHOICES, self.sequence_pe
+        assert self.op_format in ("fixed", "variable"), self.op_format
 
 
 def trunc_normal_(t: torch.Tensor, std: float, generator=None) -> torch.Tensor:
@@ -119,7 +122,8 @@ class TRM(GridModel):
         d = cfg.d_model
         std = 1.0 / math.sqrt(d)
         self.embed_scale = math.sqrt(d)
-        self.tok_emb = nn.Parameter(trunc_normal_(torch.empty(T.NONAR_VOCAB_SIZE, d), std))
+        V = T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.NONAR_VOCAB_SIZE
+        self.tok_emb = nn.Parameter(trunc_normal_(torch.empty(V, d), std))
         self.type_emb = nn.Parameter(trunc_normal_(torch.empty(2, d), std))
         if cfg.sequence_pe == "learned":
             self.slot_emb = nn.Parameter(trunc_normal_(torch.empty(cfg.n_slots, d), std))
@@ -148,17 +152,20 @@ class TRM(GridModel):
         self.grad_block_applications = 0
 
     def _embed(self, batch):
-        assert batch["ops"].shape[1] == self.cfg.n_slots, f"expected {self.cfg.n_slots} operation slots"
+        n = self.n_ops_of(batch["ops"])
+        N = self.cfg.n_slots
+        self._n = n
         tokens = T.grid_token_inputs(batch["ops"], batch["x"])
         rc = self.row_emb[self.rows] + self.col_emb[self.cols]
         if self.cfg.sequence_pe == "learned":
-            pos = torch.cat([self.slot_emb, rc], dim=0)
+            pos = torch.cat([self.slot_emb[:n], rc], dim=0)
         else:
-            pos = torch.cat([rc.new_zeros(self.cfg.n_slots, rc.shape[-1]), rc], dim=0)
-        emb = self.tok_emb[tokens] + pos + self.type_emb[self.types]
+            pos = torch.cat([rc.new_zeros(n, rc.shape[-1]), rc], dim=0)
+        types = torch.cat([self.types[:n], self.types[N:]])
+        emb = self.tok_emb[tokens] + pos + self.type_emb[types]
         x = self.embed_scale * 0.7071067811865476 * emb
         if self.cfg.sequence_pe == "sinusoidal":
-            x = x + self.seq_pe.additive(self.seq_pos).to(x.dtype)   # added ONCE to the input embedding x, scale 1
+            x = x + self.seq_pe.additive(self.seq_pos[:n + 36]).to(x.dtype)   # added ONCE to x, scale 1
         mask = (tokens != T.PAD_ID)[:, None, None, :]
         return x, mask
 
@@ -189,8 +196,8 @@ class TRM(GridModel):
         """Returns the list of S answer logits [B,36,10] (one per supervised refinement).
         States are freshly initialized here for every call (no state carried across inputs)."""
         self.reset_counters()
-        self._rope = self.seq_pe.rotary(self.seq_pos) if self.cfg.sequence_pe == "rope" else None
-        x, mask = self._embed(batch)
+        x, mask = self._embed(batch)                       # states below are sized to the ACTUAL sequence length
+        self._rope = self.seq_pe.rotary(self.seq_pos[:x.shape[1]]) if self.cfg.sequence_pe == "rope" else None
         B, L, D = x.shape
         y = self.y_init.to(x.dtype).expand(B, L, D)
         z = self.z_init.to(x.dtype).expand(B, L, D)
@@ -200,7 +207,7 @@ class TRM(GridModel):
                 for _ in range(self.cfg.T_cycles - 1):
                     y, z = self.latent_recursion(x, y, z, mask)
             y, z = self.latent_recursion(x, y, z, mask)
-            outs.append(self.head(y[:, self.cfg.n_slots:]))          # differentiable decode BEFORE detaching
+            outs.append(self.head(y[:, self._n:]))          # differentiable decode BEFORE detaching
             y, z = y.detach(), z.detach()             # detach carried states between refinements
         return outs
 

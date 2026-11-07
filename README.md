@@ -574,6 +574,83 @@ use the legacy *trainable* 1D tables. Results go to `compact_02345_pe/learned/`.
 placement + learned PE, same 361-word support), 09 separates placement (05 vs 09) from PE type (09 vs 07/08). The
 learned tables add parameters, so 09 is not parameter-identical to 07/08. One seed.
 
+## 15. Identity-filler vs variable-length instructions, all nine models (notebooks 10/11)
+
+[![Open 10 in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/10_identity_02345_all_models.ipynb)
+[`notebooks/10_identity_02345_all_models.ipynb`](notebooks/10_identity_02345_all_models.ipynb) ·
+[![Open 11 in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/11_variable_length_02345_all_models.ipynb)
+[`notebooks/11_variable_length_02345_all_models.ipynb`](notebooks/11_variable_length_02345_all_models.ipynb)
+
+**Shared data.**
+* Instructions have k A/B/C tokens with k ∈ {0, 2, 3, 4, 5}: 361 logical words, all repetitions allowed. k = 1 is
+  never used for training or checkpoint selection. ACC is allowed even though it equals A.
+* Each update of 256 records holds 51 records per k plus one rotating extra, so each k gets exactly 256,000 of the
+  1,280,000 records (seed 42, 5000 updates).
+* Within k, the word is uniform over {A,B,C}^k and the ordered slot subset is uniform over C(5,k). This gives 1009
+  five-slot training patterns; the 15 singleton patterns are held out.
+* Both formats serialize the SAME indexed records:
+  * **identity**: all 5 slots, with every unused slot filled by a visible, learnable `<identity>` token (token 19).
+    `<identity>` is a normal attention key and is never masked or zeroed. There is no PAD anywhere.
+  * **variable_length**: only the k A/B/C tokens, with no PAD, no `<identity>` and no reserved slots. EMPTY is a
+    zero-length operation segment.
+* Batches are bucketed by k (`group`), so neither format is ever padded.
+* Gradient accumulation weights each bucket by n/256, giving one optimizer and scheduler step per logical update.
+
+**Models.**
+* All nine families are trained separately in each format: 18 runs, with no shared CNN controls.
+* For each architecture, both formats start from identical initial tensors.
+* Attention models use learned absolute 1D positions:
+  * identity: physical slots, with fixed offsets (AR: 82 tokens, `<OUTPUT>` at 44).
+  * variable_length: contiguous positions, with offsets that move with k (AR: 77+k tokens, `<OUTPUT>` at 39+k).
+* TRM states are sized to the actual sequence length.
+* The CNNs use a new conditioner shared by both formats: v_j = φ(concat(E_op(o_j), E_pos(j))), s = Σ_j v_j over the
+  ACTUAL tokens (k = 0 → s = 0), then ρ → FiLM. The legacy concatenation adapter remains the default for old
+  experiments.
+* Unique parameters (identical in both formats):
+
+| model | parameters |
+|---|---:|
+| transformer_ar | 10,702,868 |
+| looped_transformer_ar | 1,830,548 |
+| transformer_encoder | 10,666,378 |
+| looped_transformer_encoder | 1,794,058 |
+| vit | 10,685,608 |
+| looped_vit | 1,813,288 |
+| trm | 9,943,680 |
+| rescnn_film | 10,122,410 |
+| unet_film | 10,417,226 |
+
+**Selection and test.**
+* **Validation:** 1,500 records, one per (grid, k), balanced over all 361 words. The checkpoint is selected on the
+  k-macro final-answer digit CE.
+* **Test:** the 361 seen words × 1000 grids, with identity using one deterministic placement per word/grid. Plus the
+  singletons:
+  * identity: A/B/C × 5 placements × 1000 = 15,000 records;
+  * variable_length: A/B/C × 1000 = 3,000 records.
+* Totals: 376,000 / 364,000 records per model; 6,660,000 across the 18 runs.
+* Identity singletons are reported per operation × placement, with the mean and min/max over placements and slot 1
+  shown separately. The best placement is never selected.
+
+**Diagnostics.** These cover singletons:
+* 288-transform matching;
+* explicit X, XX, XC, CX, identity (= CC) and original-pair hypotheses, with eligible / union-matched / coverage
+  counts;
+* FIT/DIAG fixed transforms and source maps per (operation, placement);
+* identity placement consistency;
+* the format comparison, paired by model/word/grid hash, with per-placement transition tables and no inflation of the
+  3,000 variable records.
+
+Prediction files are located through `artifact_index.json`, which is rebuilt by scanning the per-run `ARTIFACT.json`
+files.
+
+**Outputs.** `/content/drive/MyDrive/decompositionality_results/identity_varlen_02345_all_models/` contains
+`manifests/`, `identity/<model>`, `variable_length/<model>` and `comparisons/`. Run each notebook with Run all; rerun it
+to resume.
+
+**Limits.** One seed. The two formats differ in filler semantics, positions, visible length and downstream offsets;
+this is not a pure mask or length ablation. Historical PAD runs (04–09) use a different serialization and CNN adapter,
+so they are not paired with these runs.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

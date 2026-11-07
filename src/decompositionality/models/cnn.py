@@ -33,6 +33,8 @@ class ResCNNConfig:
     groups: int = 8
     cond: OpConditionerConfig = None
     n_slots: int = 3          # operation slots (legacy 3; mixed-length experiments 5)
+    conditioner: str = "concat"   # "concat" (legacy fixed-slot concatenation) | "set_mlp" (variable-length, see below)
+    op_format: str = "fixed"      # "fixed" | "variable"
 
     def __post_init__(self):
         if self.cond is None:
@@ -51,6 +53,8 @@ class UNetConfig:
     groups: int = 8
     cond: OpConditionerConfig = None
     n_slots: int = 3
+    conditioner: str = "concat"
+    op_format: str = "fixed"
 
     def __post_init__(self):
         if self.cond is None:
@@ -98,6 +102,56 @@ class OpConditioner(nn.Module):
         return out
 
 
+class SetMLPConditioner(nn.Module):
+    """Order-sensitive, variable-length instruction conditioner (identity / variable_length experiments).
+
+        v_j = phi(concat(E_op(o_j), E_pos(j)))      for every ACTUALLY SUPPLIED operation token j
+        s   = sum_j v_j                             (k = 0 -> s = 0 by definition; the network still runs)
+        c   = rho(s);  FiLM (dgamma, beta) = film(c)   (film zero-initialised -> identity modulation)
+
+    phi is a 2-layer MLP over the JOINT (token, position) features, so AB and BA at fixed positions differ
+    (an additive E_op + E_pos sum would not). No padded slots are ever constructed: the sum runs over the k
+    tokens that are present. E_op covers ops 0..2 plus the visible <identity> (slot value 4); value 3 (PAD)
+    has a row but never appears in the new experiments."""
+
+    def __init__(self, cfg: OpConditionerConfig, film_channels: List[int], max_positions: int = 5):
+        super().__init__()
+        e, h = cfg.op_emb_dim, cfg.hidden
+        self.max_positions = max_positions
+        self.E_op = nn.Embedding(5, e)
+        self.E_pos = nn.Embedding(max_positions, e)
+        self.phi = nn.Sequential(nn.Linear(2 * e, h), nn.GELU(), nn.Linear(h, h))
+        self.rho = nn.Sequential(nn.Linear(h, h), nn.GELU(), nn.Linear(h, h), nn.GELU())
+        self.film_channels = list(film_channels)
+        self.film = nn.Linear(h, 2 * sum(film_channels))
+        nn.init.zeros_(self.film.weight)
+        nn.init.zeros_(self.film.bias)
+        self.hidden = h
+
+    def pooled(self, ops: torch.Tensor) -> torch.Tensor:
+        B, k = ops.shape
+        assert k <= self.max_positions
+        if k == 0:
+            return self.film.weight.new_zeros(B, self.hidden)
+        pos = torch.arange(k, device=ops.device)
+        feats = torch.cat([self.E_op(ops.long()), self.E_pos(pos)[None].expand(B, k, -1)], dim=-1)
+        return self.phi(feats).sum(dim=1)
+
+    def forward(self, ops: torch.Tensor):
+        params = self.film(self.rho(self.pooled(ops)))
+        out, i = [], 0
+        for ch in self.film_channels:
+            out.append((params[:, i:i + ch], params[:, i + ch:i + 2 * ch]))
+            i += 2 * ch
+        return out
+
+
+def make_conditioner(cfg, film_channels):
+    if getattr(cfg, "conditioner", "concat") == "set_mlp":
+        return SetMLPConditioner(cfg.cond, film_channels, cfg.n_slots)
+    return OpConditioner(cfg.cond, film_channels, cfg.n_slots)
+
+
 class FiLMResBlock(nn.Module):
     """Pre-activation residual block: GN-GELU-conv-GN-FiLM-GELU-conv, plus identity."""
 
@@ -140,13 +194,14 @@ class ResCNNFiLM(_CNNBase):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         C = cfg.channels
-        self.cond = OpConditioner(cfg.cond, [C] * cfg.n_blocks, cfg.n_slots)
+        self.cond = make_conditioner(cfg, [C] * cfg.n_blocks)
         self.stem = conv3x3(12, C)
         self.blocks = nn.ModuleList([FiLMResBlock(C, cfg.groups) for _ in range(cfg.n_blocks)])
         self.out_norm = nn.GroupNorm(cfg.groups, C)
         self.classifier = nn.Conv2d(C, 10, 1)
 
     def logits(self, batch):
+        self.n_ops_of(batch["ops"])
         films = self.cond(batch["ops"])
         h = self.stem(grid_input(batch["x"], self.stem.weight.dtype))
         for blk, f in zip(self.blocks, films):
@@ -164,7 +219,7 @@ class UNetFiLM(_CNNBase):
         self.cfg, self.model_id = cfg, model_id
         Ch, Cl, g = cfg.c_high, cfg.c_low, cfg.groups
         film_ch = [Ch] * cfg.enc_blocks + [Cl] * cfg.mid_blocks + [Ch] * cfg.dec_blocks
-        self.cond = OpConditioner(cfg.cond, film_ch, cfg.n_slots)
+        self.cond = make_conditioner(cfg, film_ch)
         self.stem = conv3x3(12, Ch)
         self.enc = nn.ModuleList([FiLMResBlock(Ch, g) for _ in range(cfg.enc_blocks)])
         self.down = conv3x3(Ch, Cl, stride=2)                         # 6x6 -> 3x3
@@ -176,6 +231,7 @@ class UNetFiLM(_CNNBase):
         self.classifier = nn.Conv2d(Ch, 10, 1)
 
     def logits(self, batch):
+        self.n_ops_of(batch["ops"])
         films = iter(self.cond(batch["ops"]))
         h = self.stem(grid_input(batch["x"], self.stem.weight.dtype))
         for blk in self.enc:

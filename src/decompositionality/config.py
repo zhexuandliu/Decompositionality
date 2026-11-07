@@ -73,14 +73,22 @@ class ExperimentConfig:
         return is_mixed(self.experiment)
 
     @property
+    def is_idvar(self) -> bool:
+        from .idvar import is_idvar
+        return is_idvar(self.experiment)
+
+    @property
     def n_slots(self) -> int:
-        """Operation slots: legacy experiments keep the 3-slot layout; mixed-length experiments use 5."""
+        """Operation slots / max instruction positions: legacy 3; mixed-length, compact and identity/variable 5."""
         from .mixed import N_SLOTS
-        return N_SLOTS if self.is_mixed else 3
+        return N_SLOTS if (self.is_mixed or self.is_idvar) else 3
 
     @property
     def train_strings(self) -> List[str]:
         """Training words as LABELS (the empty word is "EMPTY")."""
+        if self.is_idvar:
+            from .idvar import training_labels as idvar_labels
+            return idvar_labels()
         if self.is_mixed:
             from .mixed import training_labels
             return training_labels(self.experiment)
@@ -88,14 +96,17 @@ class ExperimentConfig:
 
     @property
     def experiment_dir(self) -> Path:
+        from .idvar import IDVAR_DIRS
         from .mixed import COMPACT_DIRS
-        return Path(self.output_root) / COMPACT_DIRS.get(self.experiment, self.experiment)
+        return Path(self.output_root) / {**COMPACT_DIRS, **IDVAR_DIRS}.get(self.experiment, self.experiment)
 
     @property
     def manifest_dir(self) -> Path:
         """Compact PE experiments share ONE manifest folder at the family root; others keep theirs per experiment."""
+        from .idvar import is_idvar
         from .mixed import is_compact
-        return Path(self.output_root) / "manifests" if is_compact(self.experiment) else self.experiment_dir / "manifests"
+        shared = is_compact(self.experiment) or is_idvar(self.experiment)
+        return Path(self.output_root) / "manifests" if shared else self.experiment_dir / "manifests"
 
     @property
     def sequence_pe(self):
@@ -118,8 +129,9 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
                            models: Optional[List[str]] = None, **train_overrides) -> ExperimentConfig:
     """Full mode = the benchmark defaults. Smoke mode keeps the FULL model architectures
     and only shrinks steps/batch/eval sets for integration testing (never for reporting)."""
+    from .idvar import IDVAR_EXPERIMENTS
     from .mixed import COMPACT_EXPERIMENTS, MIXED_EXPERIMENTS
-    known = list(O.TRAIN_SETS) + list(MIXED_EXPERIMENTS) + list(COMPACT_EXPERIMENTS)
+    known = list(O.TRAIN_SETS) + list(MIXED_EXPERIMENTS) + list(COMPACT_EXPERIMENTS) + list(IDVAR_EXPERIMENTS)
     if experiment not in known:
         raise ValueError(f"experiment must be one of {known}")
     if mode not in ("full", "smoke"):
@@ -129,7 +141,7 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     if mode == "smoke":
         tc = replace(tc, **SMOKE_OVERRIDES)
         splits = dict(SMOKE_SPLITS)
-        if experiment in MIXED_EXPERIMENTS or experiment in COMPACT_EXPERIMENTS:
+        if experiment in MIXED_EXPERIMENTS or experiment in COMPACT_EXPERIMENTS or experiment in IDVAR_EXPERIMENTS:
             splits["n_test_grids"] = 2   # 2 grids x 364 words = 728 smoke test records
     tc = replace(tc, **train_overrides)
     root = output_root if mode == "full" else str(Path(output_root) / "smoke")

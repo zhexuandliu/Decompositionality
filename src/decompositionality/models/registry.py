@@ -58,6 +58,9 @@ def config_dict(model: GridModel) -> dict:
     if d.get("sequence_pe") == "learned":      # legacy default: omit so legacy hashes are unchanged
         d.pop("sequence_pe")
         d.pop("pe_base", None)
+    for key, legacy in (("identity_token", False), ("op_format", "fixed"), ("conditioner", "concat")):
+        if d.get(key) == legacy:
+            d.pop(key)
     return d
 
 

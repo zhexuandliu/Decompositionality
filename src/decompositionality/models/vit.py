@@ -45,7 +45,8 @@ class ViT(GridModel):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         d = cfg.d_model
-        self.op_emb = nn.Embedding(4, d)              # 3 atomic ops + PAD (PAD keys are masked)
+        # 3 atomic ops + PAD (masked) [+ the visible, learnable <identity> op, slot value 4, when enabled]
+        self.op_emb = nn.Embedding(5 if cfg.identity_token else 4, d)
         self.patch_proj = nn.Linear(PATCH * PATCH * 10, d)  # 2x2x10 one-hot, order preserved
         self.type_emb = nn.Embedding(2, d)
         if cfg.sequence_pe == "learned":
@@ -67,20 +68,22 @@ class ViT(GridModel):
 
     def logits(self, batch) -> torch.Tensor:
         ops, x = batch["ops"].long(), batch["x"].long()
-        n = self.cfg.n_slots
-        assert ops.shape[1] == n, f"expected {n} operation slots"
+        n = self.n_ops_of(ops)
+        N = self.cfg.n_slots
         B = x.shape[0]
+        types = torch.cat([self.types[:n], self.types[N:]])
+        seq_pos = self.seq_pos[:n + NP * NP]
         onehot = F.one_hot(x, 10).to(self.patch_proj.weight.dtype)        # [B,6,6,10]
         patches = patchify(onehot).reshape(B, NP * NP, -1)                # [B,9,40]
         cos = sin = None
-        h_ops = self.op_emb(ops) + self.slot_emb(self.slots) if self.cfg.sequence_pe == "learned" else self.op_emb(ops)
+        h_ops = self.op_emb(ops) + self.slot_emb(self.slots[:n]) if self.cfg.sequence_pe == "learned" else self.op_emb(ops)
         h_patch = self.patch_proj(patches) + self.prow_emb(self.prow) + self.pcol_emb(self.pcol)
-        h = torch.cat([h_ops, h_patch], dim=1) + self.type_emb(self.types)  # [B, n+9, d]
+        h = torch.cat([h_ops, h_patch], dim=1) + self.type_emb(types)  # [B, n+9, d]
         if self.cfg.sequence_pe != "learned":
-            add = self.seq_pe.additive(self.seq_pos)
+            add = self.seq_pe.additive(seq_pos)
             if add is not None:
                 h = h + add.to(h.dtype)
-            cos, sin = self.seq_pe.rotary(self.seq_pos)
+            cos, sin = self.seq_pe.rotary(seq_pos)
         valid = torch.cat([ops != 3, torch.ones(B, NP * NP, dtype=torch.bool, device=x.device)], dim=1)
         h = self.stack(h, valid[:, None, None, :], cos, sin)
         out = self.head(self.ln_f(h[:, n:])).view(B, NP * NP, PATCH * PATCH, 10)

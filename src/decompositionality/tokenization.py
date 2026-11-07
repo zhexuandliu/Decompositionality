@@ -37,9 +37,14 @@ BOS_ID, OPS_ID, GRID_ID, OUTPUT_ID, EOS_ID = 14, 15, 16, 17, 18
 VOCAB_SIZE = 19
 NONAR_VOCAB_SIZE = 14  # digits + 3 ops + PAD
 TOKEN_NAMES = [str(i) for i in range(10)] + list(O.OP_TOKEN_NAMES) + ["<PAD>", "<BOS>", "<OPS>", "<GRID>", "<OUTPUT>", "<EOS>"]
+TOKEN_NAMES_WITH_IDENTITY = TOKEN_NAMES + ["<identity>"]
 
 # op-slot value (0,1,2 or PAD_OP=3) -> token ID
-_OP_SLOT_TO_TOKEN = torch.tensor([OP_TOKEN_BASE + 0, OP_TOKEN_BASE + 1, OP_TOKEN_BASE + 2, PAD_ID])
+# Visible, learnable <identity> operation (identity-filler experiments only; appended so legacy IDs are unchanged).
+IDENTITY_OP = 4          # slot value
+IDENTITY_ID = 19         # token ID
+VOCAB_SIZE_WITH_IDENTITY = 20
+_OP_SLOT_TO_TOKEN = torch.tensor([OP_TOKEN_BASE + 0, OP_TOKEN_BASE + 1, OP_TOKEN_BASE + 2, PAD_ID, IDENTITY_ID])
 
 AR_LEN = 80
 IDX_BOS, IDX_OPS, IDX_SLOTS, IDX_GRID = 0, 1, (2, 3, 4), 5

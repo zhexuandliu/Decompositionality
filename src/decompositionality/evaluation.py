@@ -30,10 +30,33 @@ def amp_context(device: torch.device, amp_dtype):
 
 
 def to_device(batch: Dict[str, np.ndarray], device: torch.device, sl=slice(None), with_target=True):
-    out = {"ops": torch.as_tensor(np.asarray(batch["ops"][sl]), dtype=torch.long, device=device),
+    """``sl`` is a slice or an index array. Records stored in five-slot form (``slots5``) are SERIALIZED here
+    according to ``batch["condition"]`` (identity: all 5 tokens; variable_length: only the actual A/B/C tokens);
+    such index sets must share one k (callers group by k), so no padding is ever introduced."""
+    if "slots5" in batch:
+        from .idvar import serialize_ops
+        ops = serialize_ops(np.asarray(batch["slots5"][sl]), batch["condition"])
+    else:
+        ops = np.asarray(batch["ops"][sl])
+    out = {"ops": torch.as_tensor(ops, dtype=torch.long, device=device),
            "x": torch.as_tensor(np.asarray(batch["x"][sl]).astype(np.int64), device=device)}
     if with_target:
         out["y"] = torch.as_tensor(np.asarray(batch["y"][sl]).astype(np.int64), device=device)
+    return out
+
+
+def index_chunks(es: Dict[str, np.ndarray], bs: int, todo: Optional[np.ndarray] = None) -> List[np.ndarray]:
+    """Index chunks of at most ``bs`` records. If ``es`` has a ``group`` field (actual instruction length), every
+    chunk contains a single group (same-length buckets, no padding); otherwise contiguous ranges."""
+    n = len(es["x"])
+    idx = np.arange(n) if todo is None else np.asarray(todo)
+    if "group" not in es:
+        return [idx[i:i + bs] for i in range(0, len(idx), bs)]
+    g = np.asarray(es["group"])[idx]
+    out = []
+    for val in np.unique(g):
+        sel = idx[g == val]
+        out += [sel[i:i + bs] for i in range(0, len(sel), bs)]
     return out
 
 
@@ -45,54 +68,59 @@ def default_eval_batch_size(model, device) -> int:
 
 def run_model_on_set(model, es: Dict[str, np.ndarray], device, amp_dtype=None, batch_size: Optional[int] = None,
                      want_ce: bool = True, want_pred: bool = True) -> Dict[str, np.ndarray]:
-    """Run a model over an evaluation set. Predictions are computed from (ops, x) only."""
+    """Run a model over an evaluation set. Predictions are computed from (ops, x) only. Records are processed in
+    index chunks (same-length buckets when ``es`` has a ``group`` field) and returned in the ORIGINAL order.
+    An OOM retries the unfinished records with a smaller batch."""
     was_training = model.training
     model.eval()
     n = len(es["x"])
     bs = batch_size or default_eval_batch_size(model, device)
-    out: Dict[str, List[np.ndarray]] = {}
-    start = 0
+    parts: Dict[str, List] = {}
+    done_idx: List[np.ndarray] = []
+    todo = np.arange(n)
     try:
         with torch.no_grad():
-            while start < n:
-                sl = slice(start, min(n, start + bs))
+            while len(todo):
+                chunks = index_chunks(es, bs, todo)
+                finished = []
                 try:
-                    with amp_context(device, amp_dtype):
-                        if want_pred:
-                            # prediction inputs deliberately exclude the target
-                            p = model.predict(to_device(es, device, sl, with_target=False))
-                            out.setdefault("pred", []).append(p["pred"].to(torch.int8).cpu().numpy())
-                            out.setdefault("valid", []).append(p["valid"].cpu().numpy())
-                            if "eos_ok" in p:
-                                out.setdefault("eos_ok", []).append(p["eos_ok"].cpu().numpy())
-                        if want_ce:
-                            ce = model.val_cell_ce(to_device(es, device, sl, with_target=True))
-                            out.setdefault("cell_ce", []).append(ce.float().cpu().numpy())
-                except Exception as exc:  # OOM: retry the same slice with a smaller batch
+                    for ch in chunks:
+                        got = {}
+                        with amp_context(device, amp_dtype):
+                            if want_pred:
+                                # prediction inputs deliberately exclude the target
+                                p = model.predict(to_device(es, device, ch, with_target=False))
+                                got["pred"] = p["pred"].to(torch.int8).cpu().numpy()
+                                got["valid"] = p["valid"].cpu().numpy()
+                                if "eos_ok" in p:
+                                    got["eos_ok"] = p["eos_ok"].cpu().numpy()
+                                if "raw_tokens" in p:
+                                    got["raw_tokens"] = p["raw_tokens"].to(torch.int16).cpu().numpy()
+                            if want_ce:
+                                got["cell_ce"] = model.val_cell_ce(to_device(es, device, ch, with_target=True)).float().cpu().numpy()
+                        for k, v in got.items():
+                            parts.setdefault(k, []).append(v)
+                        done_idx.append(ch)
+                        finished.append(ch)
+                    todo = np.array([], dtype=np.int64)
+                except Exception as exc:  # OOM: retry the unfinished records with a smaller batch
                     if is_oom(exc) and bs > 1:
                         bs = max(1, bs // 2)
                         free_memory()
-                        # drop any partial outputs of this slice
-                        out = {k: v[: _n_batches_done(v, start)] for k, v in out.items()}
+                        # discard a partially processed chunk (outputs are appended only after a full chunk)
+                        fin = np.concatenate(finished) if finished else np.array([], dtype=np.int64)
+                        todo = np.setdiff1d(todo, fin)
                         continue
                     raise
-                start = sl.stop
     finally:
         model.train(was_training)
-    res = {k: np.concatenate(v) for k, v in out.items()}
+    order = np.concatenate(done_idx) if done_idx else np.array([], dtype=np.int64)
+    inv = np.empty(n, dtype=np.int64)
+    inv[order] = np.arange(len(order))
+    res = {k: np.concatenate(v)[inv] for k, v in parts.items()}
     if want_pred:
         res.update(score_predictions(res["pred"], res["valid"], es["y"]))
     return res
-
-
-def _n_batches_done(chunks: List[np.ndarray], n_rows: int) -> int:
-    total, k = 0, 0
-    for c in chunks:
-        if total + len(c) > n_rows:
-            break
-        total += len(c)
-        k += 1
-    return k
 
 
 def score_predictions(pred: np.ndarray, valid: np.ndarray, y: np.ndarray) -> Dict[str, np.ndarray]:

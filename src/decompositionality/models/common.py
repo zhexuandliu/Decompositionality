@@ -53,6 +53,16 @@ class GridModel(nn.Module):
     def untied_equivalent_parameters(self) -> Optional[int]:
         return None
 
+    def n_ops_of(self, ops: torch.Tensor) -> int:
+        """Actual operation-token count of a batch. Fixed formats require exactly ``n_slots`` tokens; the
+        variable-length format accepts 0..n_slots REAL tokens (no PAD, no reserved slots)."""
+        n, cap = int(ops.shape[1]), int(getattr(self.cfg, "n_slots", 3))
+        if getattr(self.cfg, "op_format", "fixed") == "variable":
+            assert 0 <= n <= cap, f"variable-length instruction of {n} tokens exceeds the {cap}-position table"
+        else:
+            assert n == cap, f"expected {cap} operation slots, got {n}"
+        return n
+
     def dummy_batch(self, batch_size: int, device) -> Dict[str, torch.Tensor]:
         g = torch.Generator().manual_seed(0)
         n = getattr(self.cfg, "n_slots", 3)

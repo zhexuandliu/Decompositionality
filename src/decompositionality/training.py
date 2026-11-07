@@ -142,9 +142,11 @@ class StepRunner:
     def _attempt(self, batch_np, B) -> Dict[str, float]:
         self.opt.zero_grad(set_to_none=True)
         totals: Dict[str, float] = {}
-        for start in range(0, B, self.mb):
-            sl = slice(start, min(B, start + self.mb))
-            n = sl.stop - sl.start
+        from .evaluation import index_chunks
+        # same-length buckets when the batch carries a "group" field (identity / variable_length experiments);
+        # each microbatch contributes (mean loss) * n / B = (sum of per-example losses) / B
+        for sl in index_chunks(batch_np, self.mb):
+            n = len(sl)
             w = n / B
             tb = to_device(batch_np, self.device, sl)
             with amp_context(self.device, self.amp_dtype):
@@ -184,6 +186,16 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     base.update(cfg.model_overrides.get(model_id) or {})
     if cfg.n_slots != 3:
         base["n_slots"] = cfg.n_slots
+    from .idvar import condition_of, is_idvar
+    if is_idvar(cfg.experiment):
+        # identical parameter shapes in BOTH conditions: <identity> in the vocabulary, max-size position tables,
+        # the variable-length CNN conditioner; only the accepted instruction format differs.
+        base["op_format"] = "variable" if condition_of(cfg.experiment) == "variable_length" else "fixed"
+        if "identity_token" in base:
+            base["identity_token"] = True
+        if "conditioner" in base:
+            base["conditioner"] = "set_mlp"
+        return base
     from .mixed import CNN_MODELS, is_compact
     if is_compact(cfg.experiment):
         pe = cfg.sequence_pe
@@ -220,6 +232,15 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
         d["n_slots"] = cfg.n_slots
         d["length_schedule"] = list(LENGTHS)
         d["checkpoint_selection"] = "mean final-answer cell CE over the 5 equal-size validation length groups"
+    from .idvar import IDVAR_DATA_VERSION, K_VALUES, condition_of, is_idvar
+    if is_idvar(cfg.experiment):
+        d["data_version"] = IDVAR_DATA_VERSION
+        d["n_slots"] = cfg.n_slots
+        d["condition"] = condition_of(cfg.experiment)
+        d["k_schedule"] = {"k_values": list(K_VALUES), "per_update": "51 per k + 1 rotating extra",
+                           "words": "uniform over {A,B,C}^k", "slots": "uniform ordered k-subset of 5"}
+        d["positions"] = "learned absolute 1D positions (identity: physical slots; variable: contiguous)"
+        d["checkpoint_selection"] = "mean final-answer digit CE over the 5 equal-size validation k groups"
     from .mixed import COMPACT_DATA_VERSION, LAYOUT_VERSION, is_compact
     if is_compact(cfg.experiment):
         d["data_version"] = COMPACT_DATA_VERSION
@@ -344,7 +365,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    if cfg.is_mixed:
+    if cfg.is_idvar:
+        from .idvar import IdVarStream, condition_of
+        stream = IdVarStream(tc.seed, tc.effective_batch_size, condition_of(cfg.experiment), manifests.heldout_bytes)
+    elif cfg.is_mixed:
         from .mixed import MixedTrainStream
         stream = MixedTrainStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
     else:
