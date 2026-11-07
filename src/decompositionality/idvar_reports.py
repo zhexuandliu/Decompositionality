@@ -92,8 +92,12 @@ def shape_audit(models: List[str]):
                 b = {"ops": ops, "x": torch.zeros(1, 6, 6, dtype=torch.long), "y": torch.zeros(1, 6, 6, dtype=torch.long)}
                 seen = {}
                 target = getattr(mod, "stack", None) or (mod.core[0] if hasattr(mod, "core") else None)
-                hook = target.register_forward_pre_hook(lambda mod_, args: seen.setdefault("L", args[0].shape[1])) \
-                    if target is not None else None
+
+                def record_len(_module, args, _seen=seen):
+                    _seen.setdefault("L", int(args[0].shape[1]))
+                    return None          # a pre-hook must return None, otherwise it REPLACES the module inputs
+
+                hook = target.register_forward_pre_hook(record_len) if target is not None else None
                 with torch.no_grad():
                     mod.val_cell_ce(b)
                 if hook:
