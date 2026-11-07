@@ -804,6 +804,37 @@ only the analysis cell gives the joint comparison across all available supports.
 * S=2/train02 keeps the even-count H ambiguity.
 * S=6 six-op failure confounds larger k with the removal of all I.
 
+## 18. AR identity / mirror diagnostics (notebook 17; diagnostic only, no training)
+
+[`notebooks/17_ar_identity_mirror_diagnostics.ipynb`](notebooks/17_ar_identity_mirror_diagnostics.ipynb)
+
+**Inputs.** Reads SAVED free-running predictions of Transformer AR and Looped AR from three roots under
+`<RESULTS_ROOT>`:
+* `identity_varlen_02345_all_models` (S=5/train02345, plus optional variable_length);
+* `identity_ar_count_extrapolation` (S=5/train02, 023, 0234);
+* `identity_ar_slot_count` (S=2/3/4/6).
+
+Runs are discovered read-only from `ARTIFACT.json` files, plus any unindexed `test_predictions.npz`. `RUN_OVERRIDES`
+points the notebook at other locations.
+
+**Missing data.** Default `RECOMPUTE_MISSING_PREDICTIONS=False`: nothing is trained, re-evaluated or re-inferred.
+* Missing sources are listed as unavailable; corrupt or failed-audit sources are quarantined. Neither is counted as zero.
+* User-reported counts are reconciled against the artifacts, never used as results.
+
+**Method** (code in `mirror_diag.py` and `mirror_report.py`, tests in `tests/test_mirror_diag.py`):
+* The exact 288-element group in canonical form T(dr,dc) o B^r o C^m.
+* Geometric mirror class = #C mod 2, not the cell-permutation sign.
+* Per-grid full-byte dictionaries match every singleton, six-step and control prediction to ALL legal transforms.
+  Ambiguity is kept.
+* Wrong legal outputs are classed as extra output-C (Delta_out = C), extra input-C (Delta_in = C) or other residuals.
+* Also: same-target pairs A~ACC, B~BCC, C~CCC, C~CCCCC; held-out (500/500) source-position maps; six-step strata by
+  n_C x training-transform membership; placement / slot / format comparisons; an evidence table for six questions.
+
+**Send back** `<RESULTS_ROOT>/ar_identity_mirror_diagnostics/<analysis_id>/AR_Identity_Diagnostics_Review.ipynb`.
+* It is a self-contained report snapshot with every table and figure baked in; no cells to run, no Drive needed.
+* The last notebook cell prints its path and downloads it.
+* CSV tables, PNGs, `diagnostic_report.html`, `diagnostic_summary.txt` and `summary.json` sit next to it.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.
