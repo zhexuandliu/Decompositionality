@@ -55,8 +55,9 @@ class GridModel(nn.Module):
 
     def dummy_batch(self, batch_size: int, device) -> Dict[str, torch.Tensor]:
         g = torch.Generator().manual_seed(0)
+        n = getattr(self.cfg, "n_slots", 3)
         return {
-            "ops": torch.randint(0, 3, (batch_size, 3), generator=g).to(device),
+            "ops": torch.randint(0, 3, (batch_size, n), generator=g).to(device),
             "x": torch.randint(0, 10, (batch_size, 6, 6), generator=g).to(device),
             "y": torch.randint(0, 10, (batch_size, 6, 6), generator=g).to(device),
         }

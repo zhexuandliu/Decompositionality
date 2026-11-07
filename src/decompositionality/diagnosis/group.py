@@ -176,57 +176,69 @@ def check_catalog(cat: Catalog) -> dict:
             "digest": cat.digest()}
 
 
-def string_classes(cat: Catalog, strings: Sequence[str], train_strings: Sequence[str]):
-    """Equivalence classes of evaluated strings (strings with the same transformation are aliases)."""
+def string_classes(cat: "Catalog", labels: Sequence[str], train_labels: Sequence[str], pair_words: Sequence[str] = ()):
+    """Equivalence classes of evaluated words (labels; "EMPTY" = identity). Words with the same
+    transformation are aliases. STRING novelty and TRANSFORMATION novelty are tracked separately, and
+    original length-two pair transformations are tracked separately from all training transformations."""
     import pandas as pd
-    train_ids = {cat.word_id(s) for s in train_strings}
+    from ..words import from_label
+    train_ids = {cat.word_id(from_label(s)) for s in train_labels}
+    pair_ids = {cat.word_id(w) for w in pair_words}
+    ids = {s: cat.word_id(from_label(s)) for s in labels}
     rows = []
-    for s in strings:
-        gid = cat.word_id(s)
-        aliases = [t for t in strings if t != s and cat.word_id(t) == gid]
-        rows.append({"string": s, "group_id": gid, "canonical_word": cat.label(gid),
-                     "string_in_training": s in set(train_strings),
+    for s in labels:
+        gid = ids[s]
+        rows.append({"string": s, "length": len(from_label(s)), "group_id": gid, "canonical_word": cat.label(gid),
+                     "string_in_training": s in set(train_labels),
                      "transformation_in_training": gid in train_ids,
-                     "alt_generator_id": cat.alt_generator_id(s),
-                     "alt_generator_word": cat.label(cat.alt_generator_id(s)),
-                     "evaluated_aliases": " ".join(aliases)})
+                     "transformation_is_original_pair": gid in pair_ids,
+                     "alt_generator_id": cat.alt_generator_id(from_label(s)),
+                     "alt_generator_word": cat.label(cat.alt_generator_id(from_label(s))),
+                     "n_evaluated_aliases": sum(1 for t in labels if t != s and ids[t] == gid),
+                     "evaluated_aliases": " ".join([t for t in labels if t != s and ids[t] == gid][:12])})
     return pd.DataFrame(rows)
 
 
 # ---------------------------------------------------------------------------
-# Human-readable error hypotheses
+# Human-readable error hypotheses (explicit rules; several may coincide or equal the truth)
 # ---------------------------------------------------------------------------
 
-HYPOTHESIS_TYPES = ["identity", "first_only", "middle_only", "last_only", "proper_prefix", "proper_suffix",
-                    "drop_one", "proper_subsequence", "reverse", "reorder", "collapse_repeats", "double_single",
-                    "training_pair"]
+HYPOTHESIS_TYPES = ["identity", "first_op", "last_op", "first_and_last", "first_two", "last_two", "drop_one",
+                    "reverse", "collapse_adjacent", "dedupe_global", "duplicate_single", "original_pair"]
+HYPOTHESIS_DESCRIPTIONS = {
+    "identity": "copy the input (execute nothing)",
+    "first_op": "execute only the first non-PAD operation",
+    "last_op": "execute only the last non-PAD operation",
+    "first_and_last": "execute the first and the last operation (a single op is executed twice)",
+    "first_two": "execute the first two operations (length >= 3)",
+    "last_two": "execute the last two operations (length >= 3)",
+    "drop_one": "drop exactly one operation (each position is a candidate)",
+    "reverse": "execute the operations in reverse order (length >= 2)",
+    "collapse_adjacent": "collapse ADJACENT repetitions (AAB -> AB; ABA unchanged)",
+    "dedupe_global": "remove all repeats keeping first-occurrence order (ABA -> AB)",
+    "duplicate_single": "execute a single operation twice (length 1 only)",
+    "original_pair": "execute one of the ORIGINAL length-two training pairs regardless of the instruction",
+}
 
 
-def hypotheses_for(word: str, train_strings: Sequence[str]) -> List[dict]:
-    """Deterministic candidate explanations: (type, executed word). Several may alias the same
-    transformation or the true one; callers deduplicate by group ID and flag truth-equivalence."""
+def hypotheses_for(word: str, pair_words: Sequence[str]) -> List[dict]:
+    """Candidate executed words per rule for a plain word ("" = EMPTY). Rules that are undefined for
+    this word are returned with ``executed_word=None`` (inapplicable; explicit in denominators)."""
     n = len(word)
     out = [("identity", "")]
-    if n >= 2:
-        out += [("first_only", word[0]), ("last_only", word[-1])]
-    if n == 3:
-        out.append(("middle_only", word[1]))
-    out += [("proper_prefix", word[:k]) for k in range(1, n)]
-    out += [("proper_suffix", word[k:]) for k in range(1, n)]
+    out += [("first_op", word[0] if n >= 1 else None), ("last_op", word[-1] if n >= 1 else None)]
+    out.append(("first_and_last", (word[0] + word[-1]) if n >= 1 else None))
+    out += [("first_two", word[:2] if n >= 3 else None), ("last_two", word[-2:] if n >= 3 else None)]
     if n >= 2:
         out += [("drop_one", word[:i] + word[i + 1:]) for i in range(n)]
-    for k in range(1, n):
-        for idx in itertools.combinations(range(n), k):
-            out.append(("proper_subsequence", "".join(word[i] for i in idx)))
-    if n >= 2:
-        out.append(("reverse", word[::-1]))
-        out += [("reorder", "".join(p)) for p in sorted(set(itertools.permutations(word))) if "".join(p) != word]
-    collapsed = "".join(dict.fromkeys(word))
-    if collapsed != word:
-        out.append(("collapse_repeats", collapsed))
-    if n == 1:
-        out.append(("double_single", word * 2))
-    out += [("training_pair", t) for t in train_strings]
+    else:
+        out.append(("drop_one", None))
+    out.append(("reverse", word[::-1] if n >= 2 else None))
+    collapsed = "".join(ch for i, ch in enumerate(word) if i == 0 or word[i - 1] != ch)
+    out.append(("collapse_adjacent", collapsed if n >= 2 else None))
+    out.append(("dedupe_global", "".join(dict.fromkeys(word)) if n >= 2 else None))
+    out.append(("duplicate_single", word * 2 if n == 1 else None))
+    out += [("original_pair", p) for p in pair_words]
     seen, res = set(), []
     for t, w in out:
         if (t, w) not in seen:

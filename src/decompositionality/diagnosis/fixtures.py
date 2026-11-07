@@ -80,3 +80,66 @@ def write_fixture_results(root: Path, n_grids: int = 40, seed: int = 0) -> Dict[
             (rn / "run_config.json").write_text(json.dumps({"model_id": m, "synthetic_fixture": True}))
         dirs[exp] = str(d)
     return dirs
+
+
+MIXED_PLANTED = {
+    "transformer_ar": "training-support words correct; singles X -> XX; unseen pairs -> identity; 2% invalid tokens",
+    "transformer_encoder": "perfect oracle on all 364 words (planted decomposition success)",
+    "trm": "training-support words correct; singles -> iid random digits",
+    "rescnn_film": "training-support words correct; single X -> original pair starting with X (pair retrieval)",
+}
+
+
+def write_mixed_fixture_results(root: Path, n_grids: int = 12, seed: int = 0) -> Dict[str, str]:
+    """SYNTHETIC mixed-length result folders (all 364 words incl. EMPTY) with planted behaviours."""
+    from .. import mixed as M
+    from ..words import from_label
+    root = Path(root)
+    rng = np.random.default_rng(seed)
+    grids = rng.integers(0, 10, (n_grids, 36)).astype(np.int8)
+    words = M.test_labels()
+    dirs = {}
+    for exp in M.MIXED_EXPERIMENTS:
+        d = root / exp
+        (d / "manifests").mkdir(parents=True, exist_ok=True)
+        np.savez_compressed(d / "manifests" / "heldout_grids.npz", val_grids=grids[:5].reshape(-1, 6, 6),
+                            test_grids=grids.reshape(-1, 6, 6))
+        train = set(M.training_labels(exp))
+        pairs = M.pair_set(exp)
+        for m in MIXED_PLANTED:
+            mrng = np.random.default_rng([seed, len(exp), len(m)])
+            X, Y, P, gid, S = [], [], [], [], []
+            for g in range(n_grids):
+                x = grids[g]
+                for s in words:
+                    w = from_label(s)
+                    y = G.oracle_apply_string(x, w)
+                    if m == "transformer_encoder" or s in train:
+                        p = y
+                    elif m == "transformer_ar":
+                        p = G.oracle_apply_string(x, w * 2) if len(w) == 1 else x.copy()
+                    elif m == "rescnn_film":
+                        p = G.oracle_apply_string(x, next(q for q in pairs if q[0] == w[0])) if len(w) == 1 else x.copy()
+                    else:
+                        p = mrng.integers(0, 10, 36)
+                    X.append(x); Y.append(y); P.append(p); gid.append(g); S.append(s)
+            P = np.array(P, dtype=np.int8)
+            if m == "transformer_ar":
+                bad = mrng.random(len(P)) < 0.02
+                P[bad, mrng.integers(0, 36, bad.sum())] = -1
+            X, Y = np.array(X, np.int8), np.array(Y, np.int8)
+            valid = (P >= 0).all(1)
+            cc = (P == Y).sum(1)
+            ev = d / "eval" / m
+            ev.mkdir(parents=True, exist_ok=True)
+            lens = np.array([len(from_label(s)) for s in S], np.int8)
+            np.savez_compressed(ev / "test_predictions.npz", pred=P.reshape(-1, 6, 6), target=Y.reshape(-1, 6, 6),
+                                input=X.reshape(-1, 6, 6), grid_id=np.array(gid, np.int32), string=np.array(S, dtype="U5"),
+                                length=lens, ops=np.array([M.canonical_slots(from_label(s)) for s in S], np.int8),
+                                valid=valid, cell_correct=cc.astype(np.int16), exact=valid & (cc == 36),
+                                cell_ce=np.zeros(len(P), np.float32))
+            dec = "greedy free-running (+1 EOS diagnostic step)" if m == "transformer_ar" else "parallel argmax"
+            (ev / "eval_summary.json").write_text(json.dumps({"model_id": m, "selected_step": 5000, "decoding": dec,
+                                                               "repo_commit": "synthetic-fixture", "config_hash": "fixture"}))
+        dirs[exp] = str(d)
+    return dirs

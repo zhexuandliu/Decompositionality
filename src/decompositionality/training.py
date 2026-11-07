@@ -175,8 +175,20 @@ def run_dir(cfg: ExperimentConfig, model_id: str) -> Path:
     return cfg.experiment_dir / "runs" / model_id
 
 
+def model_config_for(cfg: ExperimentConfig, model_id: str):
+    """Model config used for a run: registry default + optional overrides, with the experiment's
+    operation-slot count (legacy 3 is the registry default; mixed-length experiments use 5)."""
+    import dataclasses
+    from .models.registry import default_config
+    base = dataclasses.asdict(default_config(model_id))
+    base.update(cfg.model_overrides.get(model_id) or {})
+    if cfg.n_slots != 3:
+        base["n_slots"] = cfg.n_slots
+    return base
+
+
 def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict:
-    m = build_model(model_id, cfg.model_overrides.get(model_id))  # CPU, only for config/parameter accounting
+    m = build_model(model_id, model_config_for(cfg, model_id))  # CPU, only for config/parameter accounting
     mcfg, n_params = config_dict(m), count_parameters(m)
     del m
     d = {
@@ -192,6 +204,12 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
         "val_subset_grids": cfg.val_subset_grids,
         "checkpoint_format": CHECKPOINT_FORMAT,
     }
+    if cfg.is_mixed:  # extra keys ONLY for the new experiments, so legacy config hashes are unchanged
+        from .mixed import LENGTHS, MIXED_DATA_VERSION
+        d["data_version"] = MIXED_DATA_VERSION
+        d["n_slots"] = cfg.n_slots
+        d["length_schedule"] = list(LENGTHS)
+        d["checkpoint_selection"] = "mean final-answer cell CE over the 5 equal-size validation length groups"
     d["config_hash"] = stable_hash(d)
     d["model_hash"] = stable_hash({"model_id": model_id, "model_config": mcfg, "params": n_params})
     return d
@@ -266,6 +284,8 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
                            "or choose a new output directory (existing runs are never silently overwritten).")
 
     model = build_model(model_id, rc["model_config"], seed=tc.seed).to(device)
+    if getattr(model.cfg, "n_slots", 3) != cfg.n_slots:
+        raise RuntimeError(f"model has {model.cfg.n_slots} operation slots but the experiment uses {cfg.n_slots}")
     model.activation_checkpointing = tc.activation_checkpointing
     for mod in model.modules():
         if hasattr(mod, "activation_checkpointing"):
@@ -278,6 +298,9 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     global_step, best_ce, best_step, elapsed_prev, oom_total = 0, float("inf"), None, 0.0, 0
     if state_path.exists():
         ck = torch.load(state_path, map_location="cpu", weights_only=False)
+        if ck.get("n_slots", 3) != cfg.n_slots:
+            raise RuntimeError(f"cannot resume {state_path}: checkpoint has {ck.get('n_slots', 3)} operation slots, "
+                               f"experiment uses {cfg.n_slots}")
         for key in ("config_hash", "model_hash", "data_version", "manifest_hash"):
             want = rc[key] if key in rc else DATA_VERSION
             if ck.get(key) != want:
@@ -299,7 +322,11 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    stream = TrainStream(tc.seed, cfg.train_strings, tc.effective_batch_size, manifests.heldout_bytes)
+    if cfg.is_mixed:
+        from .mixed import MixedTrainStream
+        stream = MixedTrainStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
+    else:
+        stream = TrainStream(tc.seed, cfg.train_strings, tc.effective_batch_size, manifests.heldout_bytes)
     runner = StepRunner(model, opt, sched, scaler, tc, device, amp_dtype, mb, log)
     n_params = count_parameters(model)
     log(f"[{model_id}] {n_params:,} params | device {hardware_name(device)} | dtype {dtype_name(amp_dtype)} | "
@@ -312,8 +339,8 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
             "scaler": scaler.state_dict() if scaler.is_enabled() else None,
             "global_step": global_step, "rng": _rng_state(),
             "data_stream_next_step": global_step,  # stateless stream: next logical batch index
-            "best_val_cell_ce": best_ce, "best_step": best_step,
-            "config_hash": rc["config_hash"], "model_hash": rc["model_hash"], "data_version": DATA_VERSION,
+            "best_val_cell_ce": best_ce, "best_step": best_step, "n_slots": cfg.n_slots,
+            "config_hash": rc["config_hash"], "model_hash": rc["model_hash"], "data_version": rc["data_version"],
             "manifest_hash": manifests.manifest_hash, "logs": logs,
             "train_seconds": elapsed_prev + (time.time() - t0), "oom_retries": oom_total + runner.oom_retries,
         }
@@ -325,11 +352,23 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
         tv = time.time()
         r = run_model_on_set(model, val_set, device, amp_dtype, tc.eval_batch_size, want_ce=True, want_pred=False)
         s = run_model_on_set(model, subset_set, device, amp_dtype, tc.eval_batch_size, want_ce=False, want_pred=True)
-        ce = float(r["cell_ce"].mean())
+        per_len = {}
+        if "length" in val_set:  # mixed-length: select on the mean over the equal-size length groups
+            for L in np.unique(val_set["length"]):
+                per_len[f"val_cell_ce_len{int(L)}"] = float(r["cell_ce"][val_set["length"] == L].mean())
+            ce = float(np.mean(list(per_len.values())))
+            ne = val_set["length"] > 0
+            per_len["val_cell_ce_nonempty"] = float(r["cell_ce"][ne].mean())
+            for L in np.unique(subset_set["length"]):
+                sel = subset_set["length"] == L
+                per_len[f"subset_exact_len{int(L)}"] = float(s["exact"][sel].mean())
+        else:
+            ce = float(r["cell_ce"].mean())
         entry = {"step": global_step, "examples_seen": global_step * tc.effective_batch_size,
-                 "val_cell_ce": ce,
-                 "val_cell_ce_label": ("teacher-forced answer-cell CE (EOS excluded)" if model.kind == "ar" else
-                                       "final-refinement cell CE" if model.kind == "trm" else "cell CE"),
+                 "val_cell_ce": ce, **per_len,
+                 "val_cell_ce_label": (("length-macro " if per_len else "") +
+                                       ("teacher-forced answer-DIGIT CE (EOS excluded)" if model.kind == "ar" else
+                                       "final-refinement cell CE" if model.kind == "trm" else "cell CE")),
                  "subset_exact_acc": float(s["exact"].mean()), "subset_cell_acc": float(s["cell_correct"].mean() / 36),
                  "subset_valid_rate": float(s["valid"].mean()), "n_val_examples": len(val_set["x"]),
                  "n_subset_examples": len(subset_set["x"]), "val_seconds": time.time() - tv}
@@ -338,7 +377,8 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
             best_ce, best_step = ce, global_step
             atomic_torch_save({"model": model.state_dict(), "step": global_step, "val_cell_ce": ce,
                                "config_hash": rc["config_hash"], "model_hash": rc["model_hash"],
-                               "model_config": rc["model_config"], "model_id": model_id}, rdir / "best.pt")
+                               "model_config": rc["model_config"], "model_id": model_id, "n_slots": cfg.n_slots},
+                              rdir / "best.pt")
         entry["is_best"] = improved
         logs["val"].append(entry)
         log(f"  [val @ {global_step}] cell CE {ce:.4f}{' (best)' if improved else ''} | "
@@ -395,12 +435,17 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     return summary
 
 
-def profile_model(model_id: str, tc: TrainConfig, n_steps: int = 3, log=print) -> dict:
+def profile_model(model_id: str, tc: TrainConfig, n_steps: int = 3, log=print, n_slots: int = 3) -> dict:
     """Short timing run on DUMMY data (does not touch the training stream) to estimate
     the full-run time. Returns seconds per optimizer step at the probed microbatch."""
     device = resolve_device(tc.device)
     amp_dtype = resolve_amp_dtype(device, tc.dtype)
-    model = build_model(model_id, seed=tc.seed).to(device)
+    import dataclasses
+    from .models.registry import default_config
+    mc = dataclasses.asdict(default_config(model_id))
+    if n_slots != 3:
+        mc["n_slots"] = n_slots
+    model = build_model(model_id, mc, seed=tc.seed).to(device)
     opt = make_optimizer(model, tc)
     mb = probe_microbatch(model, tc, device, amp_dtype, log=lambda *_: None)
     batch = model.dummy_batch(tc.effective_batch_size, device)

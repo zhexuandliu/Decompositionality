@@ -23,6 +23,7 @@ class TransformerConfig:
     depth: int = 6           # number of block applications
     tied: bool = False       # True -> one shared block applied `depth` times
     dropout: float = 0.0
+    n_slots: int = 3         # operation slots (legacy 3; mixed-length experiments 5)
 
 
 # ---------------------------------------------------------------------------
@@ -37,8 +38,10 @@ class TransformerAR(GridModel):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         d = cfg.d_model
+        self.layout = T.ARLayout(cfg.n_slots)
+        L = self.layout.length
         self.tok_emb = nn.Embedding(T.VOCAB_SIZE, d)
-        self.pos_emb = nn.Embedding(T.AR_LEN, d)
+        self.pos_emb = nn.Embedding(L, d)
         self.seg_emb = nn.Embedding(T.NUM_SEGMENTS, d)
         self.row_emb = nn.Embedding(7, d)  # 6 = not a grid token
         self.col_emb = nn.Embedding(7, d)
@@ -46,13 +49,13 @@ class TransformerAR(GridModel):
         self.ln_f = nn.LayerNorm(d)
         self.head = nn.Linear(d, T.VOCAB_SIZE)  # full vocabulary: non-digit outputs are possible (invalid)
         gpt_init(self)
-        meta = T.ar_layout_metadata()
+        meta = self.layout.metadata()
         for k, v in meta.items():
             self.register_buffer(f"meta_{k}", v, persistent=False)
-        self.register_buffer("causal", torch.tril(torch.ones(T.AR_LEN, T.AR_LEN, dtype=torch.bool)), persistent=False)
+        self.register_buffer("causal", torch.tril(torch.ones(L, L, dtype=torch.bool)), persistent=False)
 
     def forward_tokens(self, tokens: torch.Tensor) -> torch.Tensor:
-        """tokens [B, L<=80] laid out per the fixed layout -> logits [B, L, vocab].
+        """tokens [B, L<=layout.length] laid out per the fixed layout -> logits [B, L, vocab].
         Position metadata depends only on the index in the layout."""
         B, L = tokens.shape
         h = (self.tok_emb(tokens) + self.pos_emb(self.meta_pos[:L]) + self.seg_emb(self.meta_seg[:L])
@@ -64,10 +67,11 @@ class TransformerAR(GridModel):
     def _teacher_forced(self, batch):
         """THE single next-token shift: logits at index t predict token t+1.
         Returns logits/targets for the 37 supervised positions (36 answer cells + EOS)."""
-        seq = T.ar_serialize(batch["ops"], batch["x"], batch["y"])
-        logits = self.forward_tokens(seq[:, :-1])          # positions 0..78
-        targets = seq[:, 1:]                               # tokens 1..79
-        sl = slice(T.IDX_OUTPUT, T.IDX_EOS)                # logits 42..78 -> tokens 43..79
+        lay = self.layout
+        seq = lay.serialize(batch["ops"], batch["x"], batch["y"])
+        logits = self.forward_tokens(seq[:, :-1])          # positions 0..len-2
+        targets = seq[:, 1:]                               # tokens 1..len-1
+        sl = slice(lay.idx_output, lay.idx_eos)            # logits OUTPUT..EOS-1 -> tokens first answer..EOS
         return logits[:, sl], targets[:, sl]
 
     def training_loss(self, batch):
@@ -85,22 +89,23 @@ class TransformerAR(GridModel):
         """Greedy free-running decoding from the prefix ending at <OUTPUT>.
         The model never sees ground-truth answer tokens. Full-vocabulary argmax:
         any non-digit token among the 36 grid positions makes the grid invalid."""
-        seq = T.ar_prefix(batch["ops"], batch["x"])
+        seq = self.layout.prefix(batch["ops"], batch["x"])
+        P0 = self.layout.prefix_len
         n_steps = 36 + (1 if predict_eos else 0)
         for _ in range(n_steps):
             nxt = self.forward_tokens(seq)[:, -1].argmax(dim=-1)
             seq = torch.cat([seq, nxt[:, None]], dim=1)
-        gen = seq[:, T.PREFIX_LEN:T.PREFIX_LEN + 36]
+        gen = seq[:, P0:P0 + 36]
         is_digit = gen < 10
         out = {"pred": torch.where(is_digit, gen, torch.full_like(gen, -1)), "valid": is_digit.all(dim=1),
                "raw_tokens": gen}
         if predict_eos:
-            out["eos_ok"] = seq[:, T.PREFIX_LEN + 36] == T.EOS_ID
+            out["eos_ok"] = seq[:, P0 + 36] == T.EOS_ID
         return out
 
     def cost_info(self):
         return {"block_applications_per_forward": self.cfg.depth, "core_calls_per_forward": self.cfg.depth,
-                "input_tokens": f"{T.AR_LEN - 1} (teacher forcing); prompt {T.PREFIX_LEN}",
+                "input_tokens": f"{self.layout.length - 1} (teacher forcing); prompt {self.layout.prefix_len}",
                 "decoded_output_steps": 36, "decoding": "greedy free-running (+1 EOS diagnostic step)"}
 
     def shared_core_parameters(self):
@@ -126,7 +131,8 @@ class TransformerEncoder(GridModel):
         d = cfg.d_model
         self.tok_emb = nn.Embedding(T.NONAR_VOCAB_SIZE, d)
         self.type_emb = nn.Embedding(2, d)   # 0 = operation slot, 1 = grid cell
-        self.slot_emb = nn.Embedding(3, d)   # ordered operation-slot positions
+        n = cfg.n_slots
+        self.slot_emb = nn.Embedding(n, d)   # ordered operation-slot positions
         self.row_emb = nn.Embedding(6, d)
         self.col_emb = nn.Embedding(6, d)
         self.stack = BlockStack(cfg.depth, cfg.tied, lambda: PreNormBlock(d, cfg.n_heads, cfg.d_ff, cfg.dropout))
@@ -136,15 +142,17 @@ class TransformerEncoder(GridModel):
         cells = torch.arange(36)
         self.register_buffer("rows", cells // 6, persistent=False)
         self.register_buffer("cols", cells % 6, persistent=False)
-        self.register_buffer("slots", torch.arange(3), persistent=False)
-        self.register_buffer("types", torch.tensor([0] * 3 + [1] * 36), persistent=False)
+        self.register_buffer("slots", torch.arange(n), persistent=False)
+        self.register_buffer("types", torch.tensor([0] * n + [1] * 36), persistent=False)
 
     def logits(self, batch) -> torch.Tensor:
-        tokens = T.grid_token_inputs(batch["ops"], batch["x"])          # [B,39]
+        n = self.cfg.n_slots
+        assert batch["ops"].shape[1] == n, f"expected {n} operation slots"
+        tokens = T.grid_token_inputs(batch["ops"], batch["x"])          # [B, n+36]
         pos = torch.cat([self.slot_emb(self.slots), self.row_emb(self.rows) + self.col_emb(self.cols)], dim=0)
         h = self.tok_emb(tokens) + self.type_emb(self.types) + pos
         h = self.stack(h, key_padding_mask(tokens, T.PAD_ID))         # no causal mask
-        return self.head(self.ln_f(h[:, 3:]))                          # [B,36,10]
+        return self.head(self.ln_f(h[:, n:]))                          # [B,36,10]
 
     def training_loss(self, batch):
         loss = cell_ce_per_example(self.logits(batch), batch["y"].reshape(-1, 36)).mean()
@@ -160,7 +168,7 @@ class TransformerEncoder(GridModel):
 
     def cost_info(self):
         return {"block_applications_per_forward": self.cfg.depth, "core_calls_per_forward": self.cfg.depth,
-                "input_tokens": "39 (3 op slots + 36 cells)", "decoded_output_steps": 1,
+                "input_tokens": f"{self.cfg.n_slots + 36} ({self.cfg.n_slots} op slots + 36 cells)", "decoded_output_steps": 1,
                 "decoding": "parallel argmax"}
 
     shared_core_parameters = TransformerAR.shared_core_parameters

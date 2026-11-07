@@ -48,7 +48,7 @@ class ViT(GridModel):
         self.op_emb = nn.Embedding(4, d)              # 3 atomic ops + PAD (PAD keys are masked)
         self.patch_proj = nn.Linear(PATCH * PATCH * 10, d)  # 2x2x10 one-hot, order preserved
         self.type_emb = nn.Embedding(2, d)
-        self.slot_emb = nn.Embedding(3, d)
+        self.slot_emb = nn.Embedding(cfg.n_slots, d)
         self.prow_emb = nn.Embedding(NP, d)
         self.pcol_emb = nn.Embedding(NP, d)
         self.stack = BlockStack(cfg.depth, cfg.tied, lambda: PreNormBlock(d, cfg.n_heads, cfg.d_ff, cfg.dropout))
@@ -58,20 +58,22 @@ class ViT(GridModel):
         p = torch.arange(NP * NP)
         self.register_buffer("prow", p // NP, persistent=False)
         self.register_buffer("pcol", p % NP, persistent=False)
-        self.register_buffer("slots", torch.arange(3), persistent=False)
-        self.register_buffer("types", torch.tensor([0] * 3 + [1] * 9), persistent=False)
+        self.register_buffer("slots", torch.arange(cfg.n_slots), persistent=False)
+        self.register_buffer("types", torch.tensor([0] * cfg.n_slots + [1] * 9), persistent=False)
 
     def logits(self, batch) -> torch.Tensor:
         ops, x = batch["ops"].long(), batch["x"].long()
+        n = self.cfg.n_slots
+        assert ops.shape[1] == n, f"expected {n} operation slots"
         B = x.shape[0]
         onehot = F.one_hot(x, 10).to(self.patch_proj.weight.dtype)        # [B,6,6,10]
         patches = patchify(onehot).reshape(B, NP * NP, -1)                # [B,9,40]
         h_ops = self.op_emb(ops) + self.slot_emb(self.slots)
         h_patch = self.patch_proj(patches) + self.prow_emb(self.prow) + self.pcol_emb(self.pcol)
-        h = torch.cat([h_ops, h_patch], dim=1) + self.type_emb(self.types)  # [B,12,d]
+        h = torch.cat([h_ops, h_patch], dim=1) + self.type_emb(self.types)  # [B, n+9, d]
         valid = torch.cat([ops != 3, torch.ones(B, NP * NP, dtype=torch.bool, device=x.device)], dim=1)
         h = self.stack(h, valid[:, None, None, :])
-        out = self.head(self.ln_f(h[:, 3:])).view(B, NP * NP, PATCH * PATCH, 10)
+        out = self.head(self.ln_f(h[:, n:])).view(B, NP * NP, PATCH * PATCH, 10)
         return unpatchify(out).reshape(B, 36, 10)
 
     def training_loss(self, batch):
@@ -87,7 +89,7 @@ class ViT(GridModel):
 
     def cost_info(self):
         return {"block_applications_per_forward": self.cfg.depth, "core_calls_per_forward": self.cfg.depth,
-                "input_tokens": "12 (3 op slots + 9 patches)", "decoded_output_steps": 1,
+                "input_tokens": f"{self.cfg.n_slots + 9} ({self.cfg.n_slots} op slots + 9 patches)", "decoded_output_steps": 1,
                 "decoding": "parallel argmax"}
 
     shared_core_parameters = TransformerAR.shared_core_parameters

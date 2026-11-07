@@ -32,6 +32,7 @@ class ResCNNConfig:
     n_blocks: int = 6
     groups: int = 8
     cond: OpConditionerConfig = None
+    n_slots: int = 3          # operation slots (legacy 3; mixed-length experiments 5)
 
     def __post_init__(self):
         if self.cond is None:
@@ -49,6 +50,7 @@ class UNetConfig:
     dec_blocks: int = 2
     groups: int = 8
     cond: OpConditionerConfig = None
+    n_slots: int = 3
 
     def __post_init__(self):
         if self.cond is None:
@@ -74,10 +76,11 @@ def grid_input(x: torch.Tensor, dtype) -> torch.Tensor:
 class OpConditioner(nn.Module):
     """Ordered 3-slot operation encoder -> FiLM parameters for each conditioned block."""
 
-    def __init__(self, cfg: OpConditionerConfig, film_channels: List[int]):
+    def __init__(self, cfg: OpConditionerConfig, film_channels: List[int], n_slots: int = 3):
         super().__init__()
+        self.n_slots = n_slots
         self.emb = nn.Embedding(4, cfg.op_emb_dim, padding_idx=3)  # PAD -> fixed zero vector
-        self.mlp = nn.Sequential(nn.Linear(3 * cfg.op_emb_dim, cfg.hidden), nn.GELU(),
+        self.mlp = nn.Sequential(nn.Linear(n_slots * cfg.op_emb_dim, cfg.hidden), nn.GELU(),
                                  nn.Linear(cfg.hidden, cfg.hidden), nn.GELU())
         self.film_channels = list(film_channels)
         self.film = nn.Linear(cfg.hidden, 2 * sum(film_channels))
@@ -85,6 +88,7 @@ class OpConditioner(nn.Module):
         nn.init.zeros_(self.film.bias)
 
     def forward(self, ops: torch.Tensor):
+        assert ops.shape[1] == self.n_slots, f"expected {self.n_slots} operation slots"
         c = self.mlp(self.emb(ops.long()).flatten(1))   # concatenation preserves slot order
         params = self.film(c)
         out, i = [], 0
@@ -136,7 +140,7 @@ class ResCNNFiLM(_CNNBase):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         C = cfg.channels
-        self.cond = OpConditioner(cfg.cond, [C] * cfg.n_blocks)
+        self.cond = OpConditioner(cfg.cond, [C] * cfg.n_blocks, cfg.n_slots)
         self.stem = conv3x3(12, C)
         self.blocks = nn.ModuleList([FiLMResBlock(C, cfg.groups) for _ in range(cfg.n_blocks)])
         self.out_norm = nn.GroupNorm(cfg.groups, C)
@@ -160,7 +164,7 @@ class UNetFiLM(_CNNBase):
         self.cfg, self.model_id = cfg, model_id
         Ch, Cl, g = cfg.c_high, cfg.c_low, cfg.groups
         film_ch = [Ch] * cfg.enc_blocks + [Cl] * cfg.mid_blocks + [Ch] * cfg.dec_blocks
-        self.cond = OpConditioner(cfg.cond, film_ch)
+        self.cond = OpConditioner(cfg.cond, film_ch, cfg.n_slots)
         self.stem = conv3x3(12, Ch)
         self.enc = nn.ModuleList([FiLMResBlock(Ch, g) for _ in range(cfg.enc_blocks)])
         self.down = conv3x3(Ch, Cl, stride=2)                         # 6x6 -> 3x3

@@ -23,7 +23,9 @@ import numpy as np
 
 from .. import operations as O
 from ..names import DISPLAY_NAMES, MODEL_IDS
+from ..words import from_label
 from . import group as G
+from .spec import LEGACY, DiagSpec
 
 AR_MODELS = {"transformer_ar", "looped_transformer_ar"}
 GROUPS7 = ["singles", "pairs_seen", "pairs_unseen", "triples_all_distinct", "triples_two_types", "triples_one_type",
@@ -144,7 +146,7 @@ def load_run(experiment: str, model: str, npz_path: Path, source: str = "origina
         if p is not None and Path(p).exists():
             files[name] = str(p)
             hashes[name] = sha256_file(Path(p)) if hash_files else None
-    stored = {k: raw[k][order] for k in ("valid", "cell_correct", "exact", "cell_ce", "eos_ok") if k in raw}
+    stored = {k: raw[k][order] for k in ("valid", "cell_correct", "exact", "cell_ce", "eos_ok", "length", "ops") if k in raw}
     run = Run(experiment, model, source, files,
               X=raw["input"].reshape(n, 36)[order].astype(np.int16),
               Y=raw["target"].reshape(n, 36)[order].astype(np.int16),
@@ -194,7 +196,7 @@ def decoding_label(run: Run) -> str:
     return f"parallel prediction ({dec or 'argmax'}); not autoregressive"
 
 
-def audit_run(run: Run, manifest_grids: Optional[np.ndarray], max_examples: int = 5) -> dict:
+def audit_run(run: Run, manifest_grids: Optional[np.ndarray], max_examples: int = 5, spec: DiagSpec = LEGACY) -> dict:
     n = len(run.grid_id)
     a = {"experiment": run.experiment, "model": run.model, "source": run.source, "n_records": n,
          "selected_step": run.meta.get("selected_step"), "selected_val_cell_ce": run.meta.get("selected_val_cell_ce"),
@@ -204,11 +206,13 @@ def audit_run(run: Run, manifest_grids: Optional[np.ndarray], max_examples: int 
          "checkpoint_sha256": run.meta["file_sha256"].get("best_checkpoint")}
     counts = {s: int(c) for s, c in zip(*np.unique(run.string, return_counts=True))}
     a["n_strings"] = len(counts)
-    a["missing_strings"] = " ".join(s for s in O.TEST_STRINGS if s not in counts)
-    a["unexpected_strings"] = " ".join(s for s in counts if s not in set(O.TEST_STRINGS))
+    a["n_expected_strings"] = len(spec.words)
+    a["missing_strings"] = " ".join(s for s in spec.words if s not in counts)
+    a["unexpected_strings"] = " ".join(s for s in counts if s not in set(spec.words))
+    a["empty_word_records"] = int(counts.get("EMPTY", 0))
     a["min_count_per_string"] = min(counts.values()) if counts else 0
     a["max_count_per_string"] = max(counts.values()) if counts else 0
-    keys = np.char.add(np.char.add(run.string.astype("U3"), ":"), run.grid_id.astype(str))
+    keys = np.char.add(np.char.add(run.string.astype("U8"), ":"), run.grid_id.astype(str))
     a["duplicate_keys"] = int(len(keys) - len(np.unique(keys)))
     bad_vals = (run.P < -1) | (run.P > 9)
     a["out_of_range_prediction_values"] = int(bad_vals.sum())
@@ -233,9 +237,12 @@ def audit_run(run: Run, manifest_grids: Optional[np.ndarray], max_examples: int 
     tgt = np.empty_like(run.Y)
     for s in np.unique(run.string):
         idx = run.string == s
-        tgt[idx] = G.oracle_apply_string(run.X[idx], s)
+        tgt[idx] = G.oracle_apply_string(run.X[idx], from_label(s))
     mism = np.nonzero((tgt != run.Y).any(1))[0]
     a["target_oracle_mismatches"] = int(len(mism))
+    if "length" in run.stored:
+        a["length_field_mismatches"] = int((run.stored["length"].astype(int)
+                                            != np.array([len(from_label(x)) for x in run.string])).sum())
     a["target_mismatch_examples"] = [f"{run.string[i]}@grid{run.grid_id[i]}" for i in mism[:max_examples]]
     if manifest_grids is not None:
         ok = run.grid_id < len(manifest_grids)
@@ -252,8 +259,8 @@ def audit_run(run: Run, manifest_grids: Optional[np.ndarray], max_examples: int 
     return a
 
 
-def metrics_tables(run: Run, train_strings: Sequence[str]):
-    """Integer counts recomputed from raw records (per string and per group)."""
+def metrics_tables(run: Run, spec: DiagSpec = LEGACY):
+    """Integer counts recomputed from raw records (per word and per group)."""
     import pandas as pd
     valid = (run.P >= 0).all(1)
     cc = (run.P == run.Y).sum(1)
@@ -263,20 +270,24 @@ def metrics_tables(run: Run, train_strings: Sequence[str]):
     ps = df.groupby("string").agg(exact_correct=("exact", "sum"), n=("exact", "size"), cell_correct=("cell_correct", "sum"),
                                   invalid_records=("invalid", "sum"), invalid_cells=("invalid_cells", "sum")).reset_index()
     ps["cells_total"] = ps["n"] * 36
-    ps["group"] = ps["string"].map(lambda s: diag_group(s, train_strings))
-    order = {s: i for i, s in enumerate(O.TEST_STRINGS)}
+    ps["length"] = ps["string"].map(lambda s: len(from_label(s)))
+    ps["group"] = ps["string"].map(lambda s: spec.group_fn(run.experiment, s))
+    order = {s: i for i, s in enumerate(spec.words)}
     ps = ps.sort_values("string", key=lambda c: c.map(order)).reset_index(drop=True)
     rows = []
-    for g in GROUPS7:
-        sub = ps[ps["group"] == g] if g != "triples_all" else ps[ps["string"].str.len() == 3]
+    groups = [(g, ps["group"] == g) for g in spec.group_order]
+    groups += [(name, ps["string"].map(lambda s, f=f: f(from_label(s)))) for name, f in spec.extra_groups.items()]
+    for g, mask in groups:
+        sub = ps[mask]
         rows.append({"group": g, "n_strings": len(sub), "exact_correct": int(sub["exact_correct"].sum()),
                      "n": int(sub["n"].sum()), "cell_correct": int(sub["cell_correct"].sum()),
                      "cells_total": int(sub["cells_total"].sum()), "invalid_records": int(sub["invalid_records"].sum())})
     gr = pd.DataFrame(rows)
     for t in (ps, gr):
-        t["exact_acc"] = np.where(t["n"] > 0, t["exact_correct"] / t["n"].where(t["n"] > 0, 1), np.nan)
-        t["cell_acc"] = np.where(t["cells_total"] > 0, t["cell_correct"] / t["cells_total"].where(t["cells_total"] > 0, 1), np.nan)
-        t["invalid_rate"] = np.where(t["n"] > 0, t["invalid_records"] / t["n"].where(t["n"] > 0, 1), np.nan)
+        n = t["n"].where(t["n"] > 0)
+        t["exact_acc"] = t["exact_correct"] / n
+        t["cell_acc"] = t["cell_correct"] / t["cells_total"].where(t["cells_total"] > 0)
+        t["invalid_rate"] = t["invalid_records"] / n
         t.insert(0, "model", run.model)
         t.insert(0, "experiment", run.experiment)
     return ps, gr
@@ -297,21 +308,21 @@ def cross_run_alignment(runs: List[Run]):
                           "matched_in_all_runs": len(v & common)} for k, v in keysets.items()])
 
 
-def synthetic_oracle_selfcheck(base_grids: np.ndarray, tmp_dir: Path) -> "object":
-    """Run a PERFECT oracle predictor through the same file format, loader and metric code.
-    Must score 100% on all 39 strings (checks the evaluation/analysis path, not any checkpoint)."""
+def synthetic_oracle_selfcheck(base_grids: np.ndarray, tmp_dir: Path, spec: DiagSpec = LEGACY):
+    """Run a PERFECT oracle predictor through the same file format, loader and metric code. It must
+    score 100% on every word, including EMPTY and the longest words (validates the analysis path only)."""
     es_x, es_s, es_g = [], [], []
     for gi in range(len(base_grids)):
-        for s in O.TEST_STRINGS:
+        for s in spec.words:
             es_x.append(base_grids[gi]); es_s.append(s); es_g.append(gi)
     X = np.stack(es_x).reshape(-1, 6, 6).astype(np.int8)
-    Y = np.stack([G.oracle_apply_string(x, s) for x, s in zip(X, es_s)]).astype(np.int8)
+    Y = np.stack([G.oracle_apply_string(x, from_label(s)) for x, s in zip(X, es_s)]).astype(np.int8)
     tmp_dir.mkdir(parents=True, exist_ok=True)
-    p = tmp_dir / "oracle_test_predictions.npz"
+    p = tmp_dir / f"oracle_{spec.name}_test_predictions.npz"
     np.savez_compressed(p, pred=Y, target=Y, input=X, grid_id=np.array(es_g, dtype=np.int32),
-                        string=np.array(es_s, dtype="U3"), valid=np.ones(len(Y), bool),
+                        string=np.array(es_s, dtype="U8"), valid=np.ones(len(Y), bool),
                         cell_correct=np.full(len(Y), 36, np.int16), exact=np.ones(len(Y), bool))
-    run = load_run("synthetic", "perfect_oracle", p, "synthetic", hash_files=False)
-    ps, _ = metrics_tables(run, O.TRAIN_SETS["distinct_pairs"])
-    assert len(ps) == 39 and (ps["exact_acc"] == 1.0).all() and (ps["cell_acc"] == 1.0).all(), ps
+    run = load_run(spec.experiments[0], "perfect_oracle", p, "synthetic", hash_files=False)
+    ps, _ = metrics_tables(run, spec)
+    assert len(ps) == len(spec.words) and (ps["exact_acc"] == 1.0).all() and (ps["cell_acc"] == 1.0).all(), ps
     return ps

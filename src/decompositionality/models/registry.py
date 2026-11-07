@@ -50,7 +50,12 @@ def build_model(model_id: str, config=None, seed: Optional[int] = None) -> GridM
 
 
 def config_dict(model: GridModel) -> dict:
-    return dataclasses.asdict(model.cfg)
+    """Model config as a dict. ``n_slots`` is omitted when it equals the legacy default (3) so legacy
+    config hashes -- and therefore resume/skip of the completed legacy runs -- are unchanged."""
+    d = dataclasses.asdict(model.cfg)
+    if d.get("n_slots") == 3:
+        d.pop("n_slots")
+    return d
 
 
 def model_summary(model_id: str, config=None) -> dict:

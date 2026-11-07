@@ -9,7 +9,9 @@ import pytest
 
 from decompositionality import operations as O
 from decompositionality.diagnosis import group as G
-from decompositionality.diagnosis.analysis import analyze_run, calibration_controls, diagnostic_split
+from decompositionality.diagnosis.analysis import (analyze_run, calibration_controls, diagnostic_split,
+                                                   hypothesis_population_summary)
+from decompositionality.diagnosis.spec import LEGACY
 from decompositionality.diagnosis.artifacts import Run, audit_run, load_run, metrics_tables, synthetic_oracle_selfcheck
 from decompositionality.diagnosis.fixtures import write_fixture_results
 
@@ -78,9 +80,14 @@ def test_alternate_generators():
 
 def test_hypotheses_and_formula():
     h = {(d["hypothesis_type"], d["executed_word"]) for d in G.hypotheses_for("ABA", TRAIN1)}
-    assert ("first_only", "A") in h and ("middle_only", "B") in h and ("proper_prefix", "AB") in h
-    assert ("proper_subsequence", "AA") in h and ("reverse", "ABA") in h and ("collapse_repeats", "AB") in h
-    assert ("double_single", "CC") in {(d["hypothesis_type"], d["executed_word"]) for d in G.hypotheses_for("C", TRAIN1)}
+    assert {("first_op", "A"), ("last_op", "A"), ("first_and_last", "AA"), ("first_two", "AB"), ("last_two", "BA"),
+            ("drop_one", "BA"), ("drop_one", "AA"), ("drop_one", "AB"), ("reverse", "ABA"),
+            ("collapse_adjacent", "ABA"), ("dedupe_global", "AB"), ("original_pair", "CB")} <= h
+    hc = {(d["hypothesis_type"], d["executed_word"]) for d in G.hypotheses_for("C", TRAIN1)}
+    assert ("first_and_last", "CC") in hc and ("duplicate_single", "CC") in hc and ("reverse", None) in hc
+    he = {(d["hypothesis_type"], d["executed_word"]) for d in G.hypotheses_for("", TRAIN1)}
+    assert ("identity", "") in he and ("first_op", None) in he and ("duplicate_single", None) in he
+    assert {d["executed_word"] for d in G.hypotheses_for("AAB", TRAIN1) if d["hypothesis_type"] == "collapse_adjacent"} == {"AB"}
     assert G.exact_agreement_log10_probability(G.word_perm("A"), G.compose(G.word_perm("A"), G.A_SRC)) == -30
     assert G.exact_agreement_log10_probability(G.word_perm("A"), G.compose(G.word_perm("A"), G.Z_SRC)) == -18
     ctrl = calibration_controls(grids(400), CAT, 1)
@@ -95,26 +102,27 @@ def test_hypotheses_and_formula():
 
 # ---------------------------------------------------------------- matching
 def test_perfect_identity_wrong_and_z_and_prefix():
-    perfect = analyze_run(make_run(lambda x, s, g, r: G.oracle_apply_string(x, s)), CAT, TRAIN1, split_for(make_run(lambda *a: a[0], n=60)))
+    perfect = analyze_run(make_run(lambda x, s, g, r: G.oracle_apply_string(x, s)), CAT, LEGACY, split_for(make_run(lambda *a: a[0], n=60)))
     ps = perfect["per_string"]
     assert (ps.exact_acc == 1).all() and (ps.any_exact_group_match_rate == 1).all()
     run = make_run(lambda x, s, g, r: x.copy())
-    res = analyze_run(run, CAT, TRAIN1, split_for(run))
+    res = analyze_run(run, CAT, LEGACY, split_for(run))
     ps = res["per_string"].set_index("string")
     assert ps.loc["ABC", "dominant_wrong_unique_word"] == "I" and ps.loc["ABC", "stable_rule_selected_word"] == "I"
     assert ps.loc["CC", "exact_acc"] == 1  # CC is the identity: copying is correct there
     ht = res["hypothesis_types"].set_index(["string", "hypothesis_type"])
     assert ht.loc[("ABC", "identity"), "compatible_rate_any"] == 1
+    assert not ht.loc[("CC", "identity"), "eligible"]           # identity is the TRUTH for CC, not an error rule
     zr = make_run(lambda x, s, g, r: G.apply_perm(G.Z_SRC, G.oracle_apply_string(x, s)) if len(s) % 2 else G.oracle_apply_string(x, s))
-    zres = analyze_run(zr, CAT, TRAIN1, split_for(zr))["per_string"].set_index("string")
+    zres = analyze_run(zr, CAT, LEGACY, split_for(zr))["per_string"].set_index("string")
     assert zres.loc["A", "alt_generator_exact_rate"] == 1 and zres.loc["A", "exact_acc"] == 0
     assert zres.loc["AB", "alt_generator_exact_rate"] == 1 and zres.loc["AB", "exact_acc"] == 1
     assert zres.loc["ABC", "stable_rule_selected_is_alt_generator"]
     pr = make_run(lambda x, s, g, r: G.oracle_apply_string(x, s[:2]))
-    pres = analyze_run(pr, CAT, TRAIN1, split_for(pr))
+    pres = analyze_run(pr, CAT, LEGACY, split_for(pr))
     h = pres["hypothesis_types"].set_index(["string", "hypothesis_type"])
-    assert h.loc[("ABC", "proper_prefix"), "compatible_rate_any"] == 1
-    assert h.loc[("CBA", "training_pair"), "compatible_rate_any"] == 1   # CB is a training pair
+    assert h.loc[("ABC", "first_two"), "compatible_rate_any"] == 1
+    assert h.loc[("CBA", "original_pair"), "compatible_rate_any"] == 1   # CB is an original training pair
     assert pres["per_string"].set_index("string").loc["ABC", "exact_set_includes_training_transform_rate"] == 1
 
 
@@ -125,7 +133,7 @@ def test_arbitrary_permutation_and_many_to_one_maps_recovered():
     def beh(x, s, g, r):
         return x[perm] if s == "A" else x[many] if s == "B" else G.oracle_apply_string(x, s)
     run = make_run(beh, n=80)
-    res = analyze_run(run, CAT, TRAIN1, split_for(run))
+    res = analyze_run(run, CAT, LEGACY, split_for(run))
     sm = res["source_maps"].set_index(["string", "map_kind"])
     assert sm.loc[("A", "bijective_permutation"), "diag_cell_fidelity"] == 1
     assert sm.loc[("A", "bijective_permutation"), "group_id"] == -1
@@ -148,7 +156,7 @@ def test_arbitrary_permutation_and_many_to_one_maps_recovered():
 def test_composition_consistency_of_wrong_primitives():
     # every op replaced by ZX: compositions of the fitted single maps reproduce the model on all words
     run = make_run(lambda x, s, g, r: G.apply_perm(CAT.perms[CAT.alt_generator_id(s)], x))
-    comp = analyze_run(run, CAT, TRAIN1, split_for(run))["composition"]
+    comp = analyze_run(run, CAT, LEGACY, split_for(run))["composition"]
     c = comp[comp.map_kind == "bijective_permutation"].set_index("string")
     assert (c.agreement_with_model_exact == 1).all()
     assert c.loc["ABC", "agreement_with_target_exact"] == 0 and c.loc["AB", "agreement_with_target_exact"] == 1
@@ -157,7 +165,7 @@ def test_composition_consistency_of_wrong_primitives():
 def test_input_dependent_switching():
     ids = [CAT.word_id("A"), CAT.word_id("B"), CAT.word_id("C")]
     run = make_run(lambda x, s, g, r: G.apply_perm(CAT.perms[ids[g % 3]], x), n=90)
-    ps = analyze_run(run, CAT, TRAIN1, split_for(run))["per_string"].set_index("string")
+    ps = analyze_run(run, CAT, LEGACY, split_for(run))["per_string"].set_index("string")
     assert ps.loc["ABC", "any_exact_group_match_rate"] == 1
     assert ps.loc["ABC", "stable_rule_diag_exact_fidelity"] < 0.5
 
@@ -168,7 +176,7 @@ def test_symmetric_grid_ambiguity_kept():
     Y = np.stack([G.oracle_apply_string(const, s) for s in O.TEST_STRINGS])
     run = Run("distinct_pairs", "m", "synthetic", {}, X, Y, Y.copy(), np.zeros(39, int), np.array(O.TEST_STRINGS),
               {}, {"file_sha256": {}})
-    pe = analyze_run(run, CAT, TRAIN1, {"fit": np.array([0]), "diag": np.array([1])})["per_example"]
+    pe = analyze_run(run, CAT, LEGACY, {"fit": np.array([0]), "diag": np.array([1])})["per_example"]
     assert (pe.n_exact_group_matches == 288).all() and (pe.unique_exact_match_id == -1).all()
     assert (pe.category == "correct").all()
 
@@ -200,9 +208,10 @@ def test_invalid_tokens_shuffle_duplicates_and_manifest(tmp_path):
     au = audit_run(a, run.X[::39])
     assert au["out_of_range_prediction_values"] == 39 and au["invalid_records"] == 2 * 39
     assert au["target_oracle_mismatches"] == 0 and au["input_manifest_mismatches"] == 0 and not au["attribution_blocked"]
-    ps, gr = metrics_tables(a, TRAIN1)
+    ps, gr = metrics_tables(a, LEGACY)
     assert (ps.exact_correct == 18).all() and (ps.n == 20).all()
-    assert np.isnan(metrics_tables(a, TRAIN2)[1].set_index("group").loc["pairs_unseen", "exact_acc"])
+    a.experiment = "all_pairs"
+    assert np.isnan(metrics_tables(a, LEGACY)[1].set_index("group").loc["pairs_unseen", "exact_acc"])
     # duplicates, a wrong target and a mismatched manifest are all flagged
     bad = make_run(lambda x, s, g, r: G.oracle_apply_string(x, s), n=5)
     bad.Y[3] = (bad.Y[3] + 1) % 10
@@ -290,3 +299,29 @@ def test_missing_artifacts_and_frozen_inference_parity(tmp_path, monkeypatch):
         prov = json.loads((out / "regenerated_predictions" / "distinct_pairs" / m / "regeneration_provenance.json").read_text())
         assert prov["optimizer_created"] is False and prov["kind"].startswith("REGENERATED")
     assert not (exp_dir / "eval" / "transformer_ar" / "test_predictions.npz").exists()  # originals never written
+
+
+def test_hypothesis_denominators_union_and_bounds():
+    """Union counting within a rule, explicit eligibility, and unconditional coverage <= any-legal matching."""
+    # model: drop the FIRST op for triples (AAB -> AB: two drop_one candidates map to AB -> counted once),
+    # identity for singles (identity is eligible), truth elsewhere
+    def beh(x, s, g, r):
+        if len(s) == 3:
+            return G.oracle_apply_string(x, s[1:])
+        if len(s) == 1:
+            return x.copy()
+        return G.oracle_apply_string(x, s)
+    run = make_run(beh, n=30)
+    res = analyze_run(run, CAT, LEGACY, split_for(run))
+    ht = res["hypothesis_types"].set_index(["string", "hypothesis_type"])
+    assert ht.loc[("AAB", "drop_one"), "matched_unique"] == 30           # not 60: union, each record once
+    assert not ht.loc[("A", "first_op"), "eligible"] and not ht.loc[("A", "drop_one"), "applicable"]
+    hs = hypothesis_population_summary(res["hypothesis_types"], res["per_string"], LEGACY)
+    assert (hs["matched_unique_records"] <= hs["eligible_records"]).all()
+    assert (hs["matched_unique_records"] <= hs["population_any_legal_match_records"]).all()
+    assert (hs["unconditional_coverage (matched/population)"].fillna(0)
+            <= hs["conditional_rate (matched/eligible)"].fillna(0) + 1e-12).all()
+    row = hs[(hs.population.str.startswith("unseen")) & (hs.hypothesis_type == "duplicate_single")].iloc[0]
+    assert row.eligible_records == 3 * 30 and row.population_records == 33 * 30      # singles only eligible
+    empty = hs[(hs.population == "singles") & (hs.hypothesis_type == "first_two")].iloc[0]
+    assert empty.eligible_records == 0 and np.isnan(empty["conditional_rate (matched/eligible)"])

@@ -359,6 +359,125 @@ benchmark. Behavioural compatibility does not establish internal representations
 exists. `DECOMP_SYNTHETIC_FIXTURES=1` runs the notebook on clearly labelled **synthetic** planted behaviours; this is
 for testing only and is never a result.
 
+## 13. Mixed-length experiments (lengths 0, 2, 3, 4, 5; length 1 never trained)
+
+[![Open 04 in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/04_train_mixed_02345_distinct_pairs.ipynb)
+[`notebooks/04_train_mixed_02345_distinct_pairs.ipynb`](notebooks/04_train_mixed_02345_distinct_pairs.ipynb) ·
+[![Open 05 in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/05_train_mixed_02345_all_pairs.ipynb)
+[`notebooks/05_train_mixed_02345_all_pairs.ipynb`](notebooks/05_train_mixed_02345_all_pairs.ipynb)
+
+**Question:** can models execute the individual operations A, B, C without ever being trained on a single operation?
+Each notebook trains all nine models **from scratch**, then evaluates them, runs the diagnostics, plots and exports.
+The two notebooks are independent; neither needs the other to have run.
+
+**Supports.** Training and checkpoint-selection validation use the same support. **Only the length-two support
+differs** between the two experiments:
+
+| length | `mixed_02345_distinct_pairs` | `mixed_02345_all_pairs` |
+|---|---|---|
+| 0 | EMPTY (target = input) | EMPTY |
+| 1 | never | never |
+| 2 | AB AC BA BC CA CB | AA AB AC BA BB BC CA CB CC |
+| 3 / 4 / 5 | all 27 / 81 / 243 words | identical |
+| total | 358 words | 361 words |
+
+The legacy identifiers `distinct_pairs` and `all_pairs` keep their original length-two-only behaviour and 3-slot
+layout. Their config hashes are unchanged, so completed legacy runs still resume and skip correctly.
+
+**Sampling.** The stream is stateless and keyed by sample index:
+* **Lengths:** every block of five samples is a seeded permutation of the lengths 0/2/3/4/5, so each length gets
+  exactly 20% of samples.
+* **Words:** within a length, words follow a balanced schedule (counts differ by at most one). The schedule is
+  identical across the two experiments except at length 2.
+* **Shared across experiments:** grids (the same stream as the legacy experiments, excluding held-out grids),
+  the length schedule, PAD placement, and the words at lengths 0/3/4/5.
+* **Budget:** seed 42, 5000 steps × batch 256 = 1,280,000 examples per run (256,000 per length). Pairs now get only
+  20% of the budget, unlike the legacy experiments.
+
+**Five operation slots.** A length-k word occupies a uniformly random order-preserving subset of the 5 slots, and the
+remaining slots are PAD. EMPTY is five PADs (zero operations, not five identity operations); length 5 has no PAD.
+Evaluation uses canonical right padding. Input sizes become:
+* AR: 82 tokens, with `<OUTPUT>` at index 44, answers at 45–80 and `<EOS>` at 81 (`tokenization.ARLayout`).
+* Encoder: 41 positions. ViT: 14 positions.
+* CNN conditioner: concatenates 5 slot embeddings.
+
+All-PAD inputs stay finite because grid keys are always valid. A 3-slot checkpoint is rejected for a 5-slot
+configuration.
+
+Unique parameters with 5 slots:
+
+| model | unique parameters |
+|---|---:|
+| transformer_ar | 10,702,099 |
+| looped_transformer_ar | 1,829,779 |
+| transformer_encoder | 10,664,074 |
+| looped_transformer_encoder | 1,791,754 |
+| vit | 10,685,224 |
+| looped_vit | 1,812,904 |
+| trm | 9,939,840 |
+| rescnn_film | 10,039,594 |
+| unet_film | 10,334,410 |
+
+**Validation (checkpoint selection).** The 300 validation grids each get one word at every trained length, giving
+1,500 records. Words follow a fixed balanced schedule that covers every allowed word, and it is identical across
+experiments except at length 2.
+* **Selection:** lowest length-macro final-answer cell CE. For AR models this is teacher-forced digit CE, excluding
+  EOS.
+* **Also logged:** per-length CE and non-empty-only CE.
+* **Decoded-accuracy subset:** a fixed 32-grid validation subset (160 records), reported per length.
+* Singles and unseen pairs are never used for selection.
+
+**Test.** The selected checkpoint is evaluated on all **364 words** (lengths 0–5, including EMPTY and the singles) ×
+the 1000 held-out test grids, giving 364,000 records per model. Evaluation runs in restartable chunks. AR decoding is
+free-running, and invalid tokens count as errors. Reported results:
+* **Primary:** singles A, B, C separately and as a macro average.
+* EMPTY, reported separately.
+* Seen pairs.
+* Unseen AA/BB/CC (N/A in `all_pairs`).
+* Lengths 3/4/5. These are *seen strings on new grids*, not generalization to unseen combinations.
+* Micro and length-macro overall accuracy, both labelled explicitly.
+
+The empty word is stored and displayed as the label `EMPTY`; models never see that text.
+
+**Grids.** The base grids are regenerated deterministically from the seed. They are byte-identical to the legacy
+manifests (hash `bdf24c327a65…`), and the notebook checks this when the legacy manifest is on Drive.
+
+**Diagnostics (analysis v2).** Each notebook runs the generalized diagnostics (`DiagnosticsConfig(spec="mixed")`) on
+its own saved predictions. It adds the sibling experiment read-only, for paired comparisons, when that is present.
+The diagnostics cover:
+* the full 288-element catalog;
+* explicit rules: identity, first/last op, first-and-last, first two/last two, drop one, reverse, collapse adjacent
+  repeats, global dedupe, duplicate single, and the original training pairs;
+* FIT/DIAG fitted rules and maps, composition, controls, and the secondary half-period Z check.
+
+**Denominator fix.** The v1 report's hypothesis lines averaged per-string rates only over strings where the rule had a
+non-truth candidate. It then described that average as a share of *all* unseen examples. This is why
+`collapse_repeats` (52.4%) and `double_single` (58.4%) could exceed the any-legal rate. v2 reports, for every rule and
+declared population:
+* eligible records;
+* UNIQUE matched records, using a union within the rule;
+* the conditional rate (matched / eligible);
+* unconditional coverage (matched / population);
+* the any-legal upper bound.
+
+v2 also shows integer successes (e.g. 8998/9000) and defines its thresholds. If an output folder already contains v1
+results, v2 writes to `<dir>/versions/<version>/`, so historical exports are never overwritten.
+
+**Outputs.** `/content/drive/MyDrive/decompositionality_results/mixed_length_02345/<experiment>/` contains:
+* `runs/<model>/`: `state.pt`, `best.pt`, logs.
+* `eval/<model>/`: `test_predictions.npz`, `test_per_word.csv`, `test_groups.csv`, `eval_summary.json`, `chunks/`.
+* `figures/` and `tables/`, including `f_summary.md`.
+* `diagnostics/`.
+* `results_<experiment>.zip`, with no checkpoints, chunks or caches.
+
+Smoke runs go to `.../mixed_length_02345/smoke/`.
+
+**Interpretation limits.** Several things changed at once relative to the legacy experiments: length diversity,
+identity supervision, the slot layout, and the per-pair budget. Old/new differences are therefore not causal
+evidence about any one factor. The two new experiments differ only in their length-two support and per-pair
+exposure. With one seed, the comparisons are descriptive only. Poor seen-support fit is not a clean decomposition
+failure. Single-operation success does not by itself identify an internal algorithm.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

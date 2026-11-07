@@ -53,7 +53,8 @@ class TrainConfig:
 
 @dataclass
 class ExperimentConfig:
-    experiment: str = "distinct_pairs"     # "distinct_pairs" | "all_pairs"
+    experiment: str = "distinct_pairs"     # legacy "distinct_pairs" | "all_pairs"; or a mixed-length id
+                                           # "mixed_02345_distinct_pairs" | "mixed_02345_all_pairs"
     mode: str = "full"                     # "full" | "smoke"
     output_root: str = "results"
     models: List[str] = field(default_factory=lambda: list(MODEL_IDS))
@@ -67,7 +68,22 @@ class ExperimentConfig:
     model_overrides: dict = field(default_factory=dict)
 
     @property
+    def is_mixed(self) -> bool:
+        from .mixed import is_mixed
+        return is_mixed(self.experiment)
+
+    @property
+    def n_slots(self) -> int:
+        """Operation slots: legacy experiments keep the 3-slot layout; mixed-length experiments use 5."""
+        from .mixed import N_SLOTS
+        return N_SLOTS if self.is_mixed else 3
+
+    @property
     def train_strings(self) -> List[str]:
+        """Training words as LABELS (the empty word is "EMPTY")."""
+        if self.is_mixed:
+            from .mixed import training_labels
+            return training_labels(self.experiment)
         return list(O.TRAIN_SETS[self.experiment])
 
     @property
@@ -77,6 +93,7 @@ class ExperimentConfig:
     def to_dict(self) -> dict:
         d = asdict(self)
         d["train_strings"] = self.train_strings
+        d["n_slots"] = self.n_slots
         d["data_version"] = DATA_VERSION
         return d
 
@@ -89,8 +106,9 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
                            models: Optional[List[str]] = None, **train_overrides) -> ExperimentConfig:
     """Full mode = the benchmark defaults. Smoke mode keeps the FULL model architectures
     and only shrinks steps/batch/eval sets for integration testing (never for reporting)."""
-    if experiment not in O.TRAIN_SETS:
-        raise ValueError(f"experiment must be one of {list(O.TRAIN_SETS)}")
+    from .mixed import MIXED_EXPERIMENTS
+    if experiment not in O.TRAIN_SETS and experiment not in MIXED_EXPERIMENTS:
+        raise ValueError(f"experiment must be one of {list(O.TRAIN_SETS) + list(MIXED_EXPERIMENTS)}")
     if mode not in ("full", "smoke"):
         raise ValueError("mode must be 'full' or 'smoke'")
     tc = TrainConfig()
@@ -98,6 +116,8 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     if mode == "smoke":
         tc = replace(tc, **SMOKE_OVERRIDES)
         splits = dict(SMOKE_SPLITS)
+        if experiment in MIXED_EXPERIMENTS:
+            splits["n_test_grids"] = 2   # 2 grids x 364 words = 728 smoke test records
     tc = replace(tc, **train_overrides)
     root = output_root if mode == "full" else str(Path(output_root) / "smoke")
     cfg = ExperimentConfig(experiment=experiment, mode=mode, output_root=root,

@@ -57,6 +57,7 @@ class TRMConfig:
     T_cycles: int = 2           # T: latent_recursion cycles per refinement (T-1 without grad)
     S_refinements: int = 2      # S: supervised answer refinements
     rms_eps: float = 1e-5
+    n_slots: int = 3            # operation slots (legacy 3; mixed-length experiments 5)
 
 
 def trunc_normal_(t: torch.Tensor, std: float, generator=None) -> torch.Tensor:
@@ -113,7 +114,7 @@ class TRM(GridModel):
         self.embed_scale = math.sqrt(d)
         self.tok_emb = nn.Parameter(trunc_normal_(torch.empty(T.NONAR_VOCAB_SIZE, d), std))
         self.type_emb = nn.Parameter(trunc_normal_(torch.empty(2, d), std))
-        self.slot_emb = nn.Parameter(trunc_normal_(torch.empty(3, d), std))
+        self.slot_emb = nn.Parameter(trunc_normal_(torch.empty(cfg.n_slots, d), std))
         self.row_emb = nn.Parameter(trunc_normal_(torch.empty(6, d), std))
         self.col_emb = nn.Parameter(trunc_normal_(torch.empty(6, d), std))
         self.core = nn.ModuleList([TRMBlock(cfg) for _ in range(cfg.n_core_layers)])
@@ -124,7 +125,7 @@ class TRM(GridModel):
         cells = torch.arange(36)
         self.register_buffer("rows", cells // 6, persistent=False)
         self.register_buffer("cols", cells % 6, persistent=False)
-        self.register_buffer("types", torch.tensor([0] * 3 + [1] * 36), persistent=False)
+        self.register_buffer("types", torch.tensor([0] * cfg.n_slots + [1] * 36), persistent=False)
         self.reset_counters()
 
     # -- bookkeeping ---------------------------------------------------------
@@ -135,6 +136,7 @@ class TRM(GridModel):
         self.grad_block_applications = 0
 
     def _embed(self, batch):
+        assert batch["ops"].shape[1] == self.cfg.n_slots, f"expected {self.cfg.n_slots} operation slots"
         tokens = T.grid_token_inputs(batch["ops"], batch["x"])
         pos = torch.cat([self.slot_emb, self.row_emb[self.rows] + self.col_emb[self.cols]], dim=0)
         emb = self.tok_emb[tokens] + pos + self.type_emb[self.types]
@@ -178,7 +180,7 @@ class TRM(GridModel):
                 for _ in range(self.cfg.T_cycles - 1):
                     y, z = self.latent_recursion(x, y, z, mask)
             y, z = self.latent_recursion(x, y, z, mask)
-            outs.append(self.head(y[:, 3:]))          # differentiable decode BEFORE detaching
+            outs.append(self.head(y[:, self.cfg.n_slots:]))          # differentiable decode BEFORE detaching
             y, z = y.detach(), z.detach()             # detach carried states between refinements
         return outs
 
@@ -210,7 +212,7 @@ class TRM(GridModel):
         return {"block_applications_per_forward": e["block_applications"],
                 "core_calls_per_forward": e["core_calls"],
                 "grad_block_applications_per_forward": e["grad_block_applications"],
-                "input_tokens": "39 (3 op slots + 36 cells)",
+                "input_tokens": f"{self.cfg.n_slots + 36} ({self.cfg.n_slots} op slots + 36 cells)",
                 "decoded_output_steps": 1,
                 "decoding": f"parallel argmax of final refinement (S={self.cfg.S_refinements} refinements)"}
 
