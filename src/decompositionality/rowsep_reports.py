@@ -561,10 +561,20 @@ def run_queue(results_root: str, mode: str, seed: int, jobs: Sequence[tuple], st
 # Consolidated report (saved artifacts only)
 # ---------------------------------------------------------------------------
 
-def _read(root, c, m, seed, name):
+def read_csv_safe(p):
+    """None for a missing or empty CSV (empty per-run tables, e.g. six-step for non-S6 runs, are written as empty files)."""
     import pandas as pd
-    p = Path(root) / c / f"seed_{seed}" / "eval" / m / "analysis" / f"{name}.csv"
-    return pd.read_csv(p) if p.exists() else None
+    p = Path(p)
+    if not p.exists() or p.stat().st_size == 0:
+        return None
+    try:
+        return pd.read_csv(p)
+    except pd.errors.EmptyDataError:
+        return None
+
+
+def _read(root, c, m, seed, name):
+    return read_csv_safe(Path(root) / c / f"seed_{seed}" / "eval" / m / "analysis" / f"{name}.csv")
 
 
 def consolidated(root: Path, results_root: str, seed: int = 42, jobs=None, show=True, log=print) -> Path:
@@ -603,8 +613,8 @@ def consolidated(root: Path, results_root: str, seed: int = 42, jobs=None, show=
     curves = []
     for c, m in [(r.condition, r.model) for r in st.itertuples() if r.train == "done"]:
         rd = root / c / f"seed_{seed}" / "runs" / m
-        if (rd / "train_log.csv").exists():
-            t = pd.read_csv(rd / "train_log.csv")
+        t = read_csv_safe(rd / "train_log.csv")
+        if t is not None:
             ls = "-" if m == "transformer_ar" else "--"
             for ax, col in zip(axes.flat[:3], ("answer_cell_nll", "row_nll", "eos_nll")):
                 if col in t:
@@ -612,8 +622,8 @@ def consolidated(root: Path, results_root: str, seed: int = 42, jobs=None, show=
             for _, r in t.iterrows():
                 curves.append({"condition": c, "model": m, "step": r.step, "loss": r.loss, "digit_ce": r.get("answer_cell_nll"),
                                "row_ce": r.get("row_nll"), "eos_ce": r.get("eos_nll")})
-        if (rd / "val_log.csv").exists():
-            v = pd.read_csv(rd / "val_log.csv")
+        v = read_csv_safe(rd / "val_log.csv")
+        if v is not None:
             axes[1, 1].plot(v.step, v.val_cell_ce.clip(lower=1e-7), ls="-" if m == "transformer_ar" else "--", lw=0.8)
     for ax, ttl in zip(axes.flat, ("train digit CE (36)", "train ROW CE (5)", "train EOS CE", "validation digit CE (selection)")):
         ax.set(yscale="log", title=ttl, xlabel="update")
@@ -763,8 +773,9 @@ def consolidated(root: Path, results_root: str, seed: int = 42, jobs=None, show=
     aud = root / "audits" / f"seed_{seed}"
     for name in ("layout", "initialization", "streams", "validation_audit", "registry"):
         p = aud / f"{name}.csv"
-        if p.exists():
-            R.table(f"Audit: {name}", pd.read_csv(p), 60)
+        t = read_csv_safe(p)
+        if t is not None:
+            R.table(f"Audit: {name}", t, 60)
     (out / "tables").mkdir(parents=True, exist_ok=True)
     for k, t in T_.items():
         t.to_csv(out / "tables" / f"{k}.csv", index=False)

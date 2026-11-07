@@ -77,8 +77,9 @@ def preflight(seed: int = 42, B: int = 256, main_root: Path = None):
     rec = {}
     if main_root is not None:
         p = Path(main_root) / "audits" / f"seed_{seed}" / "initialization.csv"
-        if p.exists():
-            rec = pd.read_csv(p).set_index("model").full_init_sha.to_dict()
+        t = RR.read_csv_safe(p)
+        if t is not None:
+            rec = t.set_index("model").full_init_sha.to_dict()
     for m in RS.MODELS:
         sd, prov = RS.common_initial_state(m, seed)
         ini.append({"model": m, "full_init_sha": prov["full_sha"], "legacy_shared_sha": prov["legacy_shared_sha"],
@@ -104,10 +105,8 @@ def _means(root, c, m, seed):
     if not _complete(root, c, m, seed):
         return None
     p = Path(root) / c / f"seed_{seed}" / "eval" / m / "analysis" / "singleton_grid_means.csv"
-    try:
-        return pd.read_csv(p).set_index(["word", "grid_hash"]).exact
-    except Exception:
-        return None
+    t = RR.read_csv_safe(p)
+    return t.set_index(["word", "grid_hash"]).exact if t is not None and len(t) else None
 
 
 def report(results_root: str, mode: str, seed: int = 42, sel_jobs=None, show=True, log=print) -> Path:
@@ -129,9 +128,8 @@ def report(results_root: str, mode: str, seed: int = 42, sel_jobs=None, show=Tru
     def cat(name, base=root, pairs=None):
         L = []
         for c, m in (pairs or done):
-            p = Path(base) / c / f"seed_{seed}" / "eval" / m / "analysis" / f"{name}.csv"
-            if p.exists():
-                t = pd.read_csv(p)
+            t = RR.read_csv_safe(Path(base) / c / f"seed_{seed}" / "eval" / m / "analysis" / f"{name}.csv")
+            if t is not None:
                 if len(t):
                     t.insert(0, "model", m); t.insert(0, "condition", c)
                     L.append(t)
@@ -142,13 +140,13 @@ def report(results_root: str, mode: str, seed: int = 42, sel_jobs=None, show=Tru
     for c, m in [(r.condition, r.model) for r in st.itertuples() if r.train == "done"]:
         rd = root / c / f"seed_{seed}" / "runs" / m
         ls = "-" if m == "transformer_ar" else "--"
-        if (rd / "train_log.csv").exists():
-            t = pd.read_csv(rd / "train_log.csv")
+        t = RR.read_csv_safe(rd / "train_log.csv")
+        if t is not None:
             for ax, col in zip(axes.flat[:3], ("answer_cell_nll", "row_nll", "eos_nll")):
                 if col in t:
                     ax.plot(t.step, t[col].clip(lower=1e-7), ls=ls, lw=0.9, label=f"{c} {RR.SHORT[m]}")
-        if (rd / "val_log.csv").exists():
-            v = pd.read_csv(rd / "val_log.csv")
+        v = RR.read_csv_safe(rd / "val_log.csv")
+        if v is not None:
             axes[1, 1].plot(v.step, v.val_cell_ce.clip(lower=1e-7), ls=ls, lw=0.9, label=f"{c} {RR.SHORT[m]}")
     for ax, ttl in zip(axes.flat, ("train digit CE", "train ROW CE", "train EOS CE", "validation digit CE (selection)")):
         ax.set(yscale="log", title=ttl, xlabel="update")
@@ -239,8 +237,9 @@ def report(results_root: str, mode: str, seed: int = 42, sel_jobs=None, show=Tru
     aud = root / "audits" / f"seed_{seed}"
     for name in ("preflight", "initialization", "layout"):
         p = aud / f"{name}.csv"
-        if p.exists():
-            R.table(f"Audit: {name}", pd.read_csv(p), 30)
+        t = RR.read_csv_safe(p)
+        if t is not None:
+            R.table(f"Audit: {name}", t, 30)
     res = []
     for c, m in [(r.condition, r.model) for r in st.itertuples() if r.train == "done"]:
         d = root / c / f"seed_{seed}"
