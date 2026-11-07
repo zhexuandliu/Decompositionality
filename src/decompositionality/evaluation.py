@@ -33,9 +33,9 @@ def to_device(batch: Dict[str, np.ndarray], device: torch.device, sl=slice(None)
     """``sl`` is a slice or an index array. Records stored in five-slot form (``slots5``) are SERIALIZED here
     according to ``batch["condition"]`` (identity: all 5 tokens; variable_length: only the actual A/B/C tokens);
     such index sets must share one k (callers group by k), so no padding is ever introduced."""
-    if "slots5" in batch:
+    if "slots5" in batch or "slots" in batch:   # "slots": identity-format slot array of any width S
         from .idvar import serialize_ops
-        ops = serialize_ops(np.asarray(batch["slots5"][sl]), batch["condition"])
+        ops = serialize_ops(np.asarray(batch["slots5" if "slots5" in batch else "slots"][sl]), batch["condition"])
     else:
         ops = np.asarray(batch["ops"][sl])
     out = {"ops": torch.as_tensor(ops, dtype=torch.long, device=device),

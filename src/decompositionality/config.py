@@ -83,14 +83,26 @@ class ExperimentConfig:
         return is_idext(self.experiment)
 
     @property
+    def is_idslot(self) -> bool:
+        from .idslot import is_idslot
+        return is_idslot(self.experiment)
+
+    @property
     def n_slots(self) -> int:
-        """Operation slots / max instruction positions: legacy 3; mixed-length, compact and identity/variable 5."""
+        """Operation slots / max instruction positions: legacy 3; mixed-length, compact and identity/variable 5;
+        slot-count experiments: positional CAPACITY 6 (actual inputs have S tokens)."""
         from .mixed import N_SLOTS
+        if self.is_idslot:
+            from .idslot import POSITION_CAPACITY_SLOTS
+            return POSITION_CAPACITY_SLOTS
         return N_SLOTS if (self.is_mixed or self.is_idvar or self.is_idext) else 3
 
     @property
     def train_strings(self) -> List[str]:
         """Training words as LABELS (the empty word is "EMPTY")."""
+        if self.is_idslot:
+            from .idslot import training_labels as idslot_labels
+            return idslot_labels(self.experiment)
         if self.is_idext:
             from .idext import training_labels as idext_labels
             return idext_labels(self.experiment)
@@ -109,6 +121,9 @@ class ExperimentConfig:
         from .mixed import COMPACT_DIRS
         if self.experiment in IDEXT_DIRS:   # <root>/<support>/seed_<seed>/
             return Path(self.output_root) / IDEXT_DIRS[self.experiment] / f"seed_{self.train.seed}"
+        from .idslot import IDSLOT_EXPERIMENTS
+        if self.experiment in IDSLOT_EXPERIMENTS:   # <root>/<condition>/seed_<seed>/
+            return Path(self.output_root) / self.experiment / f"seed_{self.train.seed}"
         return Path(self.output_root) / {**COMPACT_DIRS, **IDVAR_DIRS}.get(self.experiment, self.experiment)
 
     @property
@@ -117,7 +132,9 @@ class ExperimentConfig:
         from .idext import is_idext
         from .idvar import is_idvar
         from .mixed import is_compact
-        shared = is_compact(self.experiment) or is_idvar(self.experiment) or is_idext(self.experiment)
+        from .idslot import is_idslot
+        shared = (is_compact(self.experiment) or is_idvar(self.experiment) or is_idext(self.experiment)
+                  or is_idslot(self.experiment))
         return Path(self.output_root) / "manifests" if shared else self.experiment_dir / "manifests"
 
     @property
@@ -144,8 +161,9 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     from .idext import IDEXT_EXPERIMENTS
     from .idvar import IDVAR_EXPERIMENTS
     from .mixed import COMPACT_EXPERIMENTS, MIXED_EXPERIMENTS
+    from .idslot import IDSLOT_EXPERIMENTS
     known = (list(O.TRAIN_SETS) + list(MIXED_EXPERIMENTS) + list(COMPACT_EXPERIMENTS) + list(IDVAR_EXPERIMENTS)
-             + list(IDEXT_EXPERIMENTS))
+             + list(IDEXT_EXPERIMENTS) + list(IDSLOT_EXPERIMENTS))
     if experiment not in known:
         raise ValueError(f"experiment must be one of {known}")
     if mode not in ("full", "smoke"):
@@ -155,7 +173,8 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     if mode == "smoke":
         tc = replace(tc, **SMOKE_OVERRIDES)
         splits = dict(SMOKE_SPLITS)
-        if experiment in {**MIXED_EXPERIMENTS, **COMPACT_EXPERIMENTS, **IDVAR_EXPERIMENTS, **IDEXT_EXPERIMENTS}:
+        if experiment in {**MIXED_EXPERIMENTS, **COMPACT_EXPERIMENTS, **IDVAR_EXPERIMENTS, **IDEXT_EXPERIMENTS,
+                          **IDSLOT_EXPERIMENTS}:
             splits["n_test_grids"] = 2   # 2 grids x 364 words = 728 smoke test records
     tc = replace(tc, **train_overrides)
     root = output_root if mode == "full" else str(Path(output_root) / "smoke")

@@ -721,6 +721,89 @@ descriptively, with overlap counts. It is never a training signal.
 **Running.** Each notebook trains both models; rerun it to resume. Once the notebooks you need are finished, rerunning
 only the analysis cell gives the joint comparison across all available supports. One seed; descriptive only.
 
+## 17. Slot-count intervention in the identity format (notebook 16; eight runs, one Run all)
+
+[`notebooks/16_identity_slot_count_all_conditions_ar.ipynb`](notebooks/16_identity_slot_count_all_conditions_ar.ipynb)
+
+**Question.**
+* Five-slot identity training on k ∈ {0,2,3,4,5} generalized to singletons (notebook 10).
+* {0,2}, {0,2,3} and {0,2,3,4} did not (notebooks 12–14).
+* In those three failing supports, every training instruction contains at least one `<identity>` (I). train02345 also
+  has k=5 instructions with no I.
+* Notebook 16 changes the number of physical slots S at fixed logical support. This is NOT a pure identity ablation:
+  S also changes sequence length, downstream absolute positions, layouts, filler counts and compute.
+
+| condition | S | train k | per-k training records | words / physical patterns | no-I training records | held-out tests |
+|---|---|---|---|---|---|---|
+| slots2_train02 | 2 | 0,2 | 640,000 each (128/update) | 10 / 10 | 640,000 | k=1 × 2 positions |
+| slots3_train023 | 3 | 0,2,3 | 426,667 / 426,667 / 426,666 (85 + 1 rotating) | 37 / 55 | 426,666 | k=1 × 3 positions |
+| slots4_train0234 | 4 | 0,2,3,4 | 320,000 each (64/update) | 118 / 244 | 320,000 | k=1 × 4 positions |
+| slots6_train02345 | 6 | 0,2,3,4,5 | 256,000 each (51 + 1 rotating) | 361 / 3349 | 0 | k=1 × 6 positions; all 729 k=6 words |
+
+**Format.**
+* Exactly S visible operation tokens. The k A/B/C tokens go in a uniformly sampled ordered k-subset of the S slots;
+  the rest are the learnable `<identity>`.
+* No PAD, no ghost slots. Sequence length is 77+S tokens: OUTPUT at 39+S, answers 40+S..75+S, EOS at 76+S
+  (asserted from the serializer).
+* Contiguous learned absolute positions in a shared 83-row table. Inputs keep their true length; conditions are
+  never padded to a common S.
+* S=6/k=6 extrapolates in the non-identity count (the first inputs with zero I). It does not extrapolate in
+  position indices or sequence length.
+
+**Pairing and initialization.**
+* For 02/023/0234 the logical (word, grid, target) stream and batch order are identical to the S=5 runs of
+  notebooks 12–14; only the layout changes. This is verified in the audit cell.
+* S=6/02345 is a new stream, labelled unmatched, because notebook 10 used a different sampler.
+* Both architectures read the same stateless stream.
+* One common fresh initialization per architecture across all four conditions: the historical S=5 seed-42 init
+  (shared tensors verified equal) with position row 82 added from a separate generator.
+* Parameter counts: Transformer AR 10,703,252 (S=5: 10,702,868); Looped AR 1,830,932 (S=5: 1,830,548).
+  Both use 6 block applications.
+
+**Recipe.** Unchanged from notebooks 10/12–14:
+* AdamW 3e-4, weight decay 0.01, 250 warmup, cosine to 3e-5, clip 1.0.
+* 5000 updates × 256 = 1,280,000 records per run; validation every 250 updates.
+* Selection: lowest validation answer-digit CE (EOS excluded), macro over the trained k, ties to the earlier update.
+* Validation: 300 records per trained k (600 / 900 / 1200 / 1500 by condition).
+
+**Evaluation per model.**
+* 1000 test grids, free-running greedy decoding.
+* Counts per condition (seen + singleton + six-op = total):
+  * slots2: 10,000 + 6,000 = 16,000
+  * slots3: 37,000 + 9,000 = 46,000
+  * slots4: 118,000 + 12,000 = 130,000
+  * slots6: 361,000 + 18,000 + 729,000 = 1,108,000
+* Total over both models: 2,600,000 records.
+* Training transformations: 9 / 30 / 62 / 111. Of the 729 six-op words, 591 induce a training transformation and 138
+  do not.
+
+**Analysis.** All of it reads saved artifacts only:
+* main table, training/validation curves, accuracy by k;
+* A/B/C × slot heatmaps at each actual S;
+* same-support S=5 vs new-S singleton comparison, with metadata and paired logical seen controls;
+* six-op per-word table, transform-membership strata, and first-five / last-five / single-deletion checks on
+  failures;
+* identity-count view;
+* initialization, layout, stream, timing and status audits.
+
+**Running.**
+* Run all executes slots2 → slots3 → slots4 → slots6, Transformer AR then Looped AR, one run at a time: train →
+  evaluate → diagnose → export. That is roughly 8–9 A100 hours.
+* `RUN_CONDITIONS` / `RUN_MODELS` / `RUN_STAGES` select reruns; the defaults are all eight runs and every stage.
+* Interrupted runs: Run all again. Verified stages are skipped, training resumes from `state.pt`, and missing
+  evaluation chunks are recomputed.
+* The comparison cells can be rerun alone. Missing runs or historical sources show as "not yet available".
+* Results go to `<RESULTS_ROOT>/identity_ar_slot_count/`. `DECOMP_MODE=smoke` writes a tiny CPU integration run to
+  `.../smoke/` (not results).
+
+**Interpretation limits (one seed, descriptive).**
+* Recovery at S=3/4 together with singleton loss at S=6 would be consistent with the zero-I hypothesis, without
+  proving a mechanism.
+* S=6 singleton success would show that zero-I examples are not necessary.
+* S=3/4 failure would show they are not sufficient under this recipe.
+* S=2/train02 keeps the even-count H ambiguity.
+* S=6 six-op failure confounds larger k with the removal of all I.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

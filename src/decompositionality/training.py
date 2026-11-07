@@ -187,7 +187,14 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     if cfg.n_slots != 3:
         base["n_slots"] = cfg.n_slots
     from .idext import is_idext
+    from .idslot import is_idslot
     from .idvar import condition_of, is_idvar
+    if is_idslot(cfg.experiment):
+        # identity format, S visible slots; positional capacity 6 shared by all four conditions ("variable" only
+        # means "accepts fewer than n_slots real tokens": every input here has exactly S tokens, no PAD)
+        base["op_format"] = "variable"
+        base["identity_token"] = True
+        return base
     if is_idvar(cfg.experiment) or is_idext(cfg.experiment):
         # identical parameter shapes in BOTH conditions: <identity> in the vocabulary, max-size position tables,
         # the variable-length CNN conditioner; only the accepted instruction format differs.
@@ -242,6 +249,16 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
                            "words": "uniform over {A,B,C}^k", "slots": "uniform ordered k-subset of 5"}
         d["positions"] = "learned absolute 1D positions (identity: physical slots; variable: contiguous)"
         d["checkpoint_selection"] = "mean final-answer digit CE over the 5 equal-size validation k groups"
+    from .idslot import IDSLOT_DATA_VERSION, IDSLOT_EXPERIMENTS
+    if cfg.experiment in IDSLOT_EXPERIMENTS:
+        S_, ks_ = IDSLOT_EXPERIMENTS[cfg.experiment]
+        d["data_version"] = IDSLOT_DATA_VERSION
+        d["S"] = S_
+        d["train_ks"] = list(ks_)
+        d["condition"] = f"identity format with S={S_} visible slots (<identity> fillers, random ordered placement)"
+        d["initialization"] = ("historical S=5 identity init (seed) with position table grown 82->83 rows; added row "
+                               "from a separate generator")
+        d["checkpoint_selection"] = "mean answer-digit CE (EOS excluded) over the training k validation groups"
     from .idext import IDEXT_DATA_VERSION, is_idext, per_update_counts, train_ks
     if is_idext(cfg.experiment):
         d["data_version"] = IDEXT_DATA_VERSION
@@ -335,7 +352,11 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
         raise RuntimeError(f"{state_path} exists but resume=False. Set RESUME=True to continue it, "
                            "or choose a new output directory (existing runs are never silently overwritten).")
 
-    model = build_model(model_id, rc["model_config"], seed=tc.seed).to(device)
+    model = build_model(model_id, rc["model_config"], seed=tc.seed)
+    if cfg.is_idslot:   # common fresh init across the four slot-count conditions (grown S=5 init)
+        from .idslot import grown_initial_state
+        model.load_state_dict(grown_initial_state(model_id, tc.seed))
+    model = model.to(device)
     if getattr(model.cfg, "n_slots", 3) != cfg.n_slots:
         raise RuntimeError(f"model has {model.cfg.n_slots} operation slots but the experiment uses {cfg.n_slots}")
     model.activation_checkpointing = tc.activation_checkpointing
@@ -377,7 +398,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    if cfg.is_idext:
+    if cfg.is_idslot:
+        from .idslot import SlotStream
+        stream = SlotStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
+    elif cfg.is_idext:
         from .idext import ExtStream
         stream = ExtStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
     elif cfg.is_idvar:

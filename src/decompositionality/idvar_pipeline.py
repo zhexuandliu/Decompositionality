@@ -177,21 +177,29 @@ def evaluate_idvar_model(model_id: str, ctx: Context, log=print, chunk_grids: in
     pred, valid = cat("pred"), cat("valid")
     Y = es["y"].reshape(-1, 36)
     cc = (pred.reshape(-1, 36).astype(np.int16) == Y.astype(np.int16)).sum(1)
-    op_len = np.full(len(pred), 5) if cond == "identity" else es["k"]
+    slot_arr = es["slots5"] if "slots5" in es else es["slots"]
+    op_len = np.full(len(pred), slot_arr.shape[1]) if cond == "identity" else es["k"]
     arrays = {"pred": pred.reshape(-1, 6, 6).astype(np.int8), "target": es["y"].reshape(-1, 6, 6).astype(np.int8),
               "input": es["x"].reshape(-1, 6, 6).astype(np.int8), "grid_id": es["grid_id"].astype(np.int32),
-              "grid_hash": grid_hashes(es["x"]), "string": es["string"].astype("U5"), "k": es["k"].astype(np.int8),
+              "grid_hash": grid_hashes(es["x"]), "string": es["string"].astype("U8"), "k": es["k"].astype(np.int8),
               "kind": es["kind"].astype("U6"), "position": es["position"].astype(np.int8),
-              "slots5": es["slots5"].astype(np.int8), "op_input_length": op_len.astype(np.int8),
+              "slots5": slot_arr.astype(np.int8), "op_input_length": op_len.astype(np.int8),
               "valid": valid, "cell_correct": cc.astype(np.int16), "exact": valid & (cc == 36),
               "cell_ce": cat("cell_ce").astype(np.float32)}
     if "raw_tokens" in parts[0]:
         arrays["raw_tokens"] = cat("raw_tokens").astype(np.int16)
         arrays["eos_ok"] = cat("eos_ok")
+    from .idext import is_idext, train_ks as ext_ks
+    from .idslot import is_idslot, record_metadata, train_ks as slot_ks
+    tks = ext_ks(cfg.experiment) if is_idext(cfg.experiment) else slot_ks(cfg.experiment) if is_idslot(cfg.experiment) \
+        else V.K_VALUES
+    if is_idslot(cfg.experiment):   # per-record S, identity count, transformation membership + run metadata
+        arrays.update(record_metadata(es, cfg.experiment))
+        arrays.update({"meta_condition": np.array(cfg.experiment), "meta_model": np.array(model_id),
+                       "meta_seed": np.array(tc.seed), "meta_selected_step": np.array(ck["step"]),
+                       "meta_config_hash": np.array(rc["config_hash"])})
     pfile = edir / "test_predictions.npz"
     atomic_write_bytes(pfile, _npz_bytes(**arrays))
-    from .idext import is_idext, train_ks as ext_ks
-    tks = ext_ks(cfg.experiment) if is_idext(cfg.experiment) else V.K_VALUES
     by_word, by_k, by_single, per_op, summ = metrics_tables(arrays, cond, tks)
     for name, t in (("test_by_word", by_word), ("test_by_k", by_k), ("test_singletons", by_single),
                     ("test_singletons_per_op", per_op)):
@@ -200,8 +208,8 @@ def evaluate_idvar_model(model_id: str, ctx: Context, log=print, chunk_grids: in
         t.to_csv(edir / f"{name}.csv", index=False)
     summary = {"model_id": model_id, "condition": cond, "seed": tc.seed, "selected_step": ck["step"],
                "selected_val_cell_ce": ck["val_cell_ce"],
-               "selection_rule": "lowest k-macro validation final-answer digit CE over k in 0/2/3/4/5 (ties -> earlier)",
-               "n_records": int(len(pred)), "expected_records": V.expected_test_records(cond, n_grids), **summ,
+               "selection_rule": f"lowest k-macro validation final-answer digit CE (EOS excluded) over k in {list(tks)} (ties -> earlier)",
+               "n_records": int(len(pred)), "expected_records": expected_records_for(cfg.experiment, cond, n_grids), **summ,
                "test_eval_seconds": t_test, "peak_gpu_memory_gb_eval": peak, "hardware": hardware_name(device),
                "dtype": dtype_name(amp), "config_hash": rc["config_hash"], "manifest_hash": ctx.manifests.manifest_hash,
                "repo_commit": environment_info(ctx.repo_dir)["repo_commit"]}
@@ -218,6 +226,11 @@ def evaluate_idvar_model(model_id: str, ctx: Context, log=print, chunk_grids: in
     return summary
 
 
+def expected_records_for(experiment: str, condition: str, n_grids: int) -> int:
+    from .idslot import expected_test_records as slot_expected, is_idslot
+    return slot_expected(experiment, n_grids) if is_idslot(experiment) else V.expected_test_records(condition, n_grids)
+
+
 def build_artifact_index(root: Path) -> dict:
     """Scan <root>/<condition>/eval/<model>/ARTIFACT.json (never guess paths) into <root>/artifact_index.json."""
     root = Path(root)
@@ -230,7 +243,8 @@ def build_artifact_index(root: Path) -> dict:
     return idx
 
 
-def audit_predictions(npz_path: Path, condition: str, manifest_test_grids: Optional[np.ndarray] = None) -> dict:
+def audit_predictions(npz_path: Path, condition: str, manifest_test_grids: Optional[np.ndarray] = None,
+                      experiment: Optional[str] = None) -> dict:
     """Counts, duplicates, target recomputation with the INDEPENDENT oracle, input/manifest alignment, token validity,
     instruction-length consistency, stored-metric consistency."""
     from .diagnosis.group import oracle_apply_string
@@ -238,20 +252,21 @@ def audit_predictions(npz_path: Path, condition: str, manifest_test_grids: Optio
         a = {k: z[k] for k in z.files}
     n = len(a["pred"])
     n_grids = int(a["grid_id"].max()) + 1
-    keys = np.char.add(np.char.add(a["string"].astype("U5"), "@"), np.char.add(a["position"].astype(str),
+    keys = np.char.add(np.char.add(a["string"].astype("U8"), "@"), np.char.add(a["position"].astype(str),
                                                                               np.char.add(":", a["grid_id"].astype(str))))
     tgt = np.empty_like(a["target"])
     for s in np.unique(a["string"]):
         m = a["string"] == s
         tgt[m] = oracle_apply_string(a["input"][m], from_label(s))
-    out = {"condition": condition, "n_records": n, "expected_records": V.expected_test_records(condition, n_grids),
+    expected = expected_records_for(experiment, condition, n_grids) if experiment else V.expected_test_records(condition, n_grids)
+    out = {"condition": condition, "n_records": n, "expected_records": expected,
            "duplicate_keys": int(n - len(np.unique(keys))), "target_oracle_mismatches": int((tgt != a["target"]).any((1, 2)).sum()),
            "prediction_values_out_of_range": int(((a["pred"] < -1) | (a["pred"] > 9)).sum()),
            "invalid_records": int((~a["valid"]).sum()),
            "k1_records": int((a["k"] == 1).sum()), "singleton_records": int((a["kind"] == "single").sum())}
     words_k = np.array([len(from_label(s)) for s in a["string"]])
     out["k_field_mismatches"] = int((words_k != a["k"]).sum())
-    expect_len = np.full(n, 5) if condition == "identity" else a["k"]
+    expect_len = np.full(n, a["slots5"].shape[1]) if condition == "identity" else a["k"]
     out["op_input_length_mismatches"] = int((a["op_input_length"] != expect_len).sum())
     if condition == "variable_length":
         out["identity_or_pad_tokens_in_variable_inputs"] = 0  # serialization strips them; verified in tests
