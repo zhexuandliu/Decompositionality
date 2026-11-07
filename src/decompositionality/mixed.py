@@ -47,8 +47,10 @@ MIXED_DATA_VERSION = "decomp-mixed02345-v1"
 # Compact-layout positional-encoding ablation (notebooks 07/08). Same 361-word all-pairs support and the same
 # length/word/grid schedule as mixed_02345_all_pairs, but operations are ALWAYS left-aligned (no random gaps).
 COMPACT_EXPERIMENTS = {"compact_02345_rope": "rope", "compact_02345_sinusoidal": "sinusoidal",
+                       "compact_02345_learned": "learned",   # legacy learned 1D tables (notebook 09)
                        "compact_02345_cnn": None}      # None = shared CNN controls (no attention PE switch)
-COMPACT_DIRS = {"compact_02345_rope": "rope", "compact_02345_sinusoidal": "sinusoidal", "compact_02345_cnn": "shared_cnn"}
+COMPACT_DIRS = {"compact_02345_rope": "rope", "compact_02345_sinusoidal": "sinusoidal",
+                "compact_02345_learned": "learned", "compact_02345_cnn": "shared_cnn"}
 COMPACT_RESULTS_SUBDIR = "compact_02345_pe"
 COMPACT_DATA_VERSION = "decomp-compact02345-v1"
 LAYOUT_VERSION = "compact_left-v1"

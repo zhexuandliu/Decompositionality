@@ -87,6 +87,7 @@ def _compact_spec() -> DiagSpec:
         extra_groups={"single_A": lambda s: s == "A", "single_B": lambda s: s == "B", "single_C": lambda s: s == "C"},
         paired=("compact_02345_rope", "compact_02345_sinusoidal"),
         exp_labels={"compact_02345_rope": "Compact, RoPE", "compact_02345_sinusoidal": "Compact, sinusoidal",
+                    "compact_02345_learned": "Compact, learned 1D PE",
                     "compact_02345_cnn": "Compact, shared CNN controls (no PE switch)"},
         controls_words=common, n_slots=M.N_SLOTS)
 

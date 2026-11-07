@@ -245,6 +245,7 @@ def build_mixed_reports(exp_dir: Path, experiment: str, log=print) -> dict:
              "mixed_02345_all_pairs": "Mixed 0/2-5, all pairs",
              "compact_02345_rope": "Compact 0/2-5, RoPE (seed 42, best ckpt)",
              "compact_02345_sinusoidal": "Compact 0/2-5, sinusoidal (seed 42, best ckpt)",
+             "compact_02345_learned": "Compact 0/2-5, learned 1D PE (seed 42, best ckpt)",
              "compact_02345_cnn": "Compact 0/2-5, shared CNN controls (no PE switch)"}.get(experiment, experiment)
     pe = M.COMPACT_EXPERIMENTS.get(experiment) if M.is_compact(experiment) else None
     models = (M.CNN_MODELS if experiment == "compact_02345_cnn" else M.ATTENTION_MODELS) if M.is_compact(experiment) else None

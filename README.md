@@ -567,6 +567,13 @@ Smoke mode writes to `compact_02345_pe/smoke/`.
   placement.
 * Behavioural diagnostics do not identify an internal mechanism.
 
+**Notebook 09: compact placement + learned 1D PE**
+([`notebooks/09_train_compact_02345_learned.ipynb`](notebooks/09_train_compact_02345_learned.ipynb)). Everything is
+the same as 07/08 (data, compact layout, manifests, budget, shared CNN controls) except that the seven attention models
+use the legacy *trainable* 1D tables. Results go to `compact_02345_pe/learned/`. Together with notebook 05 (random
+placement + learned PE, same 361-word support), 09 separates placement (05 vs 09) from PE type (09 vs 07/08). The
+learned tables add parameters, so 09 is not parameter-identical to 07/08. One seed.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

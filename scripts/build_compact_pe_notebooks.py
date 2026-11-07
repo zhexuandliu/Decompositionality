@@ -13,7 +13,16 @@ from build_notebooks import BOOTSTRAP  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 NB = {"rope": ("07", "RoPE (rotary Q/K, theta 10,000, every attention call)"),
-      "sinusoidal": ("08", "fixed sinusoidal (base 10,000, added once to the input embedding, scale 1)")}
+      "sinusoidal": ("08", "fixed sinusoidal (base 10,000, added once to the input embedding, scale 1)"),
+      "learned": ("09", "LEARNED absolute 1D position/slot tables (the legacy default used in notebooks 01-06)")}
+
+LEARNED_NOTE = """
+> **Notebook 09 (learned 1D PE).** Same data, layout, manifests, budget and shared CNN controls as 07/08. The seven
+> attention models use the legacy *trainable* 1D tables instead (AR: one vector per layout position; encoder / ViT / TRM:
+> one vector per operation slot). Together with notebook 05 (random placement + learned PE, same 361-word support)
+> this separates **placement** (05 vs 09: same learned PE) from **PE type** (09 vs 07/08: same compact placement).
+> The learned tables add trainable parameters, so 09 is not parameter-identical to 07/08. One seed.
+"""
 
 INTRO = """# Compact left-aligned mixed-length training — sequence PE: **{pe_title}**
 
@@ -241,6 +250,76 @@ display(Markdown(pathlib.Path(R["report_path"]).read_text()))
 '''
 
 
+VERIFY_LEARNED = r'''# --- Validate supports, compact layout, offsets, learned-PE wiring and manifests --------------------------------
+import dataclasses, hashlib
+import numpy as np, pandas as pd
+from IPython.display import Image, Markdown, display
+from decompositionality import mixed as M, tokenization as T
+from decompositionality.mixed_pipeline import prepare_mixed
+from decompositionality.models.registry import build_model, default_config
+sup = M.support(cfg_pe.experiment)
+assert {L: len(w) for L, w in sup.items()} == {0: 1, 2: 9, 3: 27, 4: 81, 5: 243} and len(cfg_pe.train_strings) == 361
+assert len(M.test_words()) == 364 and not any(len(w) == 1 for w in M.training_words(cfg_pe.experiment))
+lay = T.ARLayout(5)
+assert (lay.length, lay.idx_output, lay.out_start, lay.out_start + 35, lay.idx_eos) == (82, 44, 45, 80, 81)
+_s = M.MixedTrainStream(SEED, cfg_pe.experiment, 256)
+_o = M.MixedTrainStream(SEED, "compact_02345_rope", 256)
+for step in (0, 1, 2):
+    a, b = _s.batch(step), _o.batch(step)
+    assert all(np.array_equal(a[k], b[k]) for k in ("x", "y", "ops", "string", "length")), "data differs from 07/08"
+    for ops, L in zip(a["ops"], a["length"]):
+        assert (ops[:L] != 3).all() and (ops[L:] == 3).all(), "not compact left-aligned"
+print("compact left alignment + identical logical data stream to notebooks 07/08: OK")
+rows = []
+for m in ATTN_MODELS:
+    c = dataclasses.asdict(default_config(m)); c.update(n_slots=5, sequence_pe="learned")
+    mod = build_model(m, c, seed=SEED)
+    names = [k for k, _ in mod.named_parameters()]
+    assert any(k.startswith(("pos_emb", "slot_emb")) for k in names), f"{m}: learned 1D table missing"
+    assert not hasattr(mod, "seq_pe"), f"{m}: rope/sinusoidal tables must not be present"
+    rows.append({"model": m, "unique_params": sum(p.numel() for p in mod.parameters()),
+                 "learned_1d_tables": ", ".join(k for k in names if k.startswith(("pos_emb", "slot_emb")))})
+init_df = pd.DataFrame(rows); display(init_df)
+ctx_pe = prepare_mixed(cfg_pe, repo_dir=str(REPO_DIR), legacy_manifest=f"{RESULTS_ROOT}/distinct_pairs/manifests/manifest.json")
+ctx_cnn = prepare_mixed(cfg_cnn, repo_dir=str(REPO_DIR), legacy_manifest=f"{RESULTS_ROOT}/distinct_pairs/manifests/manifest.json")
+assert ctx_pe.manifests.manifest_hash == ctx_cnn.manifests.manifest_hash
+cfg_pe.experiment_dir.mkdir(parents=True, exist_ok=True)
+init_df.to_csv(cfg_pe.experiment_dir / "initialization_checksums.csv", index=False)
+print("validation records per length:", pd.Series(ctx_pe.val_set["length"]).value_counts().sort_index().to_dict())
+'''
+
+DIAG_LEARNED = r'''# --- Diagnostics on saved predictions (learned PE + shared CNN controls; read-only) ------------------------------
+from decompositionality.diagnosis.runner import DiagnosticsConfig, run_diagnostics
+from decompositionality.diagnosis.spec import get_spec
+dirs = {cfg_pe.experiment: str(cfg_pe.experiment_dir), cfg_cnn.experiment: str(cfg_cnn.experiment_dir)}
+R = run_diagnostics(DiagnosticsConfig(experiment_dirs=dirs, output_dir=str(cfg_pe.experiment_dir / "diagnostics"),
+                                      chunk_size=ANALYSIS_CHUNK_SIZE, use_cache=USE_ANALYSIS_CACHE, spec="compact",
+                                      analysis_words=get_spec("compact").common_panel,
+                                      example_strings=["EMPTY", "A", "B", "C", "AB", "ABC"]))
+DFIG = pathlib.Path(R["output_dir"]) / "figures"
+def show(prefix):
+    for p in sorted(DFIG.glob(prefix + "*.png")):
+        display(Image(filename=str(p)))
+sing = R["per_string"][R["per_string"].group.isin(["singles", "EMPTY"])]
+display(sing[["experiment", "model", "string", "exact_correct", "n", "cell_acc", "any_exact_group_match_count",
+              "dominant_wrong_unique_word", "dominant_wrong_unique_share", "stable_rule_selected_word",
+              "stable_rule_diag_exact_fidelity", "argmax_map_diag_cell_fidelity"]])
+hs = R["hypothesis_summary"]
+display(hs[hs.population.str.startswith("singletons")])
+show("01_true"); show("04_dominant"); show("05_hypothesis"); show("13_exact")
+'''
+
+PAIRED_LEARNED = r'''# --- Paired comparisons on identical test examples: learned vs RoPE, learned vs sinusoidal (N/A if missing) --------
+from decompositionality.compact_reports import paired_pe_comparison
+FAMILY_ROOT = cfg_pe.experiment_dir.parent
+for other in ("rope", "sinusoidal"):
+    pc = paired_pe_comparison(FAMILY_ROOT, a_pe="learned", b_pe=other)
+    if pc is not None:
+        display(pc[pc.word_or_group.isin(["A", "B", "C"]) | pc.word_or_group.str.startswith("[group]")])
+        display(Image(filename=str(FAMILY_ROOT / "comparisons" / f"paired_learned_minus_{other}.png")))
+'''
+
+
 def build(pe: str) -> Path:
     num, title = NB[pe]
     nb = nbf.v4.new_notebook()
@@ -248,16 +327,24 @@ def build(pe: str) -> Path:
                    "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
                    "language_info": {"name": "python"}}
     md, code = nbf.v4.new_markdown_cell, nbf.v4.new_code_cell
-    nb.cells = [md(INTRO.format(pe_title=title)), code(BOOTSTRAP), code(CONFIG.format(pe=pe)), code(ENV), code(VERIFY),
-                code(COUNTS), code(TRAIN), code(EVAL), code(REPORTS), code(DIAG), code(PAIRED), code(EXPORT),
+    learned = pe == "learned"
+    intro = INTRO.format(pe_title=title) + (LEARNED_NOTE if learned else "")
+    nb.cells = [md(intro), code(BOOTSTRAP), code(CONFIG.format(pe=pe)), code(ENV),
+                code(VERIFY_LEARNED if learned else VERIFY), code(COUNTS), code(TRAIN), code(EVAL), code(REPORTS),
+                code(DIAG_LEARNED if learned else DIAG), code(PAIRED_LEARNED if learned else PAIRED), code(EXPORT),
                 md("Outputs: `<RESULTS_ROOT>/compact_02345_pe/` -> `manifests/`, `rope/`, `sinusoidal/`, `shared_cnn/` "
                    "(each: `runs/`, `eval/`, `figures/`, `tables/`, `diagnostics/`, results zip) and `comparisons/`.")]
     p = ROOT / "notebooks" / f"{num}_train_compact_02345_{pe}.ipynb"
+    if p.exists():
+        old = nbf.read(p, as_version=4)
+        if any(c.get("outputs") for c in old.cells if c.cell_type == "code"):
+            raise SystemExit(f"{p.name} contains saved outputs; refusing to overwrite it")
     nbf.validate(nb)
     nbf.write(nb, p)
     return p
 
 
 if __name__ == "__main__":
-    for pe in NB:
+    # usage: python scripts/build_compact_pe_notebooks.py learned   (never regenerates notebooks with saved outputs)
+    for pe in (sys.argv[1:] or list(NB)):
         print(build(pe))
