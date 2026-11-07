@@ -470,16 +470,16 @@ def analyze_run(cfg, model_id, log=print) -> dict:
 # Status and sequential driver
 # ---------------------------------------------------------------------------
 
-def family_root(results_root: str, mode: str) -> Path:
-    r = Path(results_root) / RS.ROWSEP_RESULTS_SUBDIR
+def family_root(results_root: str, mode: str, subdir: str = RS.ROWSEP_RESULTS_SUBDIR) -> Path:
+    r = Path(results_root) / subdir
     return r if mode == "full" else r / "smoke"
 
 
-def status_table(root: Path, seed: int = 42, jobs=None):
+def status_table(root: Path, seed: int = 42, jobs=None, universe=None):
     import pandas as pd
     rows = []
     sel = set(jobs or RS.select_jobs())
-    for c, m in RS.select_jobs():
+    for c, m in (universe or RS.select_jobs()):
         d = Path(root) / c / f"seed_{seed}"
         art = d / "eval" / m / "ARTIFACT.json"
         a = json.loads(art.read_text()) if art.exists() else {}
@@ -505,19 +505,19 @@ def _runtime_healthy():
 
 def run_queue(results_root: str, mode: str, seed: int, jobs: Sequence[tuple], stages: Sequence[str], repo_dir=None,
               chunk_grids=100, device="auto", dtype="auto", microbatch=None, model_overrides=None, train_overrides=None,
-              log=print):
+              log=print, subdir: str = RS.ROWSEP_RESULTS_SUBDIR, universe=None):
     """Sequential: for each job every selected stage completes before the next job (one model on the GPU)."""
     from .config import make_experiment_config
     from .training import train_model
     from .utils import atomic_write_json, free_memory
-    root = family_root(results_root, mode)
+    root = family_root(results_root, mode, subdir)
     log(f"queue ({len(jobs)} jobs): " + " -> ".join(f"{c}/{SHORT[m]}" for c, m in jobs) + f" | stages {list(stages)}")
     by_cond: Dict[str, List[str]] = {}
     for c, m in jobs:
         by_cond.setdefault(c, []).append(m)
     status_f = root / "status" / f"seed_{seed}.json"
     for c, ms in by_cond.items():
-        cfg = make_experiment_config(c, mode, str(Path(results_root) / RS.ROWSEP_RESULTS_SUBDIR), ms, seed=seed,
+        cfg = make_experiment_config(c, mode, str(Path(results_root) / subdir), ms, seed=seed,
                                      device=device, dtype=dtype, microbatch_size=microbatch, **(train_overrides or {}))
         cfg.resume = True
         if model_overrides:
@@ -548,13 +548,13 @@ def run_queue(results_root: str, mode: str, seed: int, jobs: Sequence[tuple], st
                     free_memory()
                     if not _runtime_healthy():
                         log("CUDA runtime unhealthy -> stopping queue; restart runtime and rerun to resume")
-                        return status_table(root, seed, jobs)
+                        return status_table(root, seed, jobs, universe)
                     break
                 finally:
                     free_memory()
         del ctx
         free_memory()
-    return status_table(root, seed, jobs)
+    return status_table(root, seed, jobs, universe)
 
 
 # ---------------------------------------------------------------------------

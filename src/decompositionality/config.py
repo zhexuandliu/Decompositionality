@@ -130,7 +130,7 @@ class ExperimentConfig:
         if self.experiment in IDEXT_DIRS:   # <root>/<support>/seed_<seed>/
             return Path(self.output_root) / IDEXT_DIRS[self.experiment] / f"seed_{self.train.seed}"
         from .idslot import IDSLOT_EXPERIMENTS
-        from .rowsep import CONDITIONS as ROWSEP_CONDITIONS
+        from .rowsep import ALL_CONDITIONS as ROWSEP_CONDITIONS
         if self.experiment in IDSLOT_EXPERIMENTS or self.experiment in ROWSEP_CONDITIONS:   # <root>/<condition>/seed_<seed>/
             return Path(self.output_root) / self.experiment / f"seed_{self.train.seed}"
         return Path(self.output_root) / {**COMPACT_DIRS, **IDVAR_DIRS}.get(self.experiment, self.experiment)
@@ -173,7 +173,7 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     from .idslot import IDSLOT_EXPERIMENTS
     known = (list(O.TRAIN_SETS) + list(MIXED_EXPERIMENTS) + list(COMPACT_EXPERIMENTS) + list(IDVAR_EXPERIMENTS)
              + list(IDEXT_EXPERIMENTS) + list(IDSLOT_EXPERIMENTS))
-    from .rowsep import CONDITIONS as ROWSEP_CONDITIONS
+    from .rowsep import ALL_CONDITIONS as ROWSEP_CONDITIONS
     known += list(ROWSEP_CONDITIONS)
     if experiment not in known:
         raise ValueError(f"experiment must be one of {known}")

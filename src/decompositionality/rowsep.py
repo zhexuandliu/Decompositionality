@@ -47,26 +47,39 @@ for _sup, _ks in (("train2", (2,)), ("train23", (2, 3)), ("train234", (2, 3, 4))
     CONDITIONS[f"variable_nozero_{_sup}"] = ("variable_nozero", "variable", None, _ks)
 GROUPS = ["fixed5", "variable_with_zero", "fixed6", "variable_nozero"]
 assert len(CONDITIONS) == 13
+# Supplement (notebook 19): fixed S=2/3/4 with ROW. Kept OUT of CONDITIONS so the main 26-job registry, its selectors
+# and checks are unchanged; every per-condition helper below accepts both dictionaries.
+SUPPLEMENT_CONDITIONS: Dict[str, tuple] = {
+    "identity_s2_train02_row": ("fixed_short", "fixed", 2, (0, 2)),
+    "identity_s3_train023_row": ("fixed_short", "fixed", 3, (0, 2, 3)),
+    "identity_s4_train0234_row": ("fixed_short", "fixed", 4, (0, 2, 3, 4)),
+}
+ALL_CONDITIONS: Dict[str, tuple] = {**CONDITIONS, **SUPPLEMENT_CONDITIONS}
 
 
 def is_rowsep(experiment: str) -> bool:
-    return experiment in CONDITIONS
+    return experiment in ALL_CONDITIONS
 
 
 def group_of(e):
-    return CONDITIONS[e][0]
+    return ALL_CONDITIONS[e][0]
 
 
 def layout_of(e):
-    return CONDITIONS[e][1]
+    return ALL_CONDITIONS[e][1]
 
 
 def n_slots(e):
-    return CONDITIONS[e][2]
+    return ALL_CONDITIONS[e][2]
 
 
 def train_ks(e):
-    return CONDITIONS[e][3]
+    return ALL_CONDITIONS[e][3]
+
+
+def _non5_fixed(e) -> bool:
+    """Fixed layouts whose placements come from the notebook-16 slot streams (S=6 main; S=2/3/4 supplement)."""
+    return layout_of(e) == "fixed" and n_slots(e) != 5
 
 
 def support_name(e):
@@ -109,8 +122,9 @@ def select_jobs(run_group="all", conditions=None, models=None) -> List[tuple]:
 
 def _layout_record(e, seed, k, j, word, slots5):
     lay = layout_of(e)
-    if lay == "fixed" and n_slots(e) == 6:
-        return IS.slots_for(word, IS.subset(make_rng(seed, IS.STREAM_SLOT_TRAIN, 6, k, j), 6, k), 6)
+    if _non5_fixed(e):
+        S = n_slots(e)
+        return IS.slots_for(word, IS.subset(make_rng(seed, IS.STREAM_SLOT_TRAIN, S, k, j), S, k), S)
     return V.slots5_for(word, slots5)          # S=5 layout (variable conditions strip the fillers at serialization)
 
 
@@ -135,7 +149,7 @@ class RowStream:
         ks = np.array([r[0] for r in recs])
         words = [r[2] for r in recs]
         x = np.stack([r[4] for r in recs]).astype(np.uint8)
-        key = "slots" if n_slots(self.e) == 6 else "slots5"
+        key = "slots" if _non5_fixed(self.e) else "slots5"
         return {"x": x, "y": V.apply_words(x, words).astype(np.uint8), key: np.stack([r[3] for r in recs]),
                 "k": ks, "group": ks, "length": ks, "string": np.array([to_label(w) for w in words]),
                 "k_index": np.array([r[1] for r in recs]), "sample_id": np.array([f"k{r[0]}:{r[1]}" for r in recs]),
@@ -149,9 +163,10 @@ def make_val_set(val_grids: np.ndarray, seed: int, e: str) -> Dict[str, np.ndarr
     rows = []
     for k in train_ks(e):
         words = V._balanced_words(seed, k, n)
-        if n_slots(e) == 6:
-            rng = make_rng(seed, IS.STREAM_SLOT_VAL, 6, k)
-            lays = [IS.slots_for(words[g], IS.subset(rng, 6, k), 6) for g in range(n)]
+        if _non5_fixed(e):
+            S = n_slots(e)
+            rng = make_rng(seed, IS.STREAM_SLOT_VAL, S, k)
+            lays = [IS.slots_for(words[g], IS.subset(rng, S, k), S) for g in range(n)]
         else:
             keys = make_rng(seed, E.STREAM_EXT_VALSLOT, k).random((n, 5))
             lays = [V.slots5_for(words[g], tuple(sorted(np.argsort(keys[g])[:k].tolist()))) for g in range(n)]
@@ -161,7 +176,7 @@ def make_val_set(val_grids: np.ndarray, seed: int, e: str) -> Dict[str, np.ndarr
     ks = np.array([r[1] for r in rows])
     words = [r[2] for r in rows]
     x = val_grids[gid].astype(np.uint8)
-    key = "slots" if n_slots(e) == 6 else "slots5"
+    key = "slots" if _non5_fixed(e) else "slots5"
     return {"x": x, "y": V.apply_words(x, words).astype(np.uint8), key: np.stack([r[3] for r in rows]), "k": ks,
             "group": ks, "length": ks, "grid_id": gid, "string": np.array([to_label(w) for w in words]),
             "condition": condition_format(e), "split": "val"}
@@ -174,6 +189,8 @@ def make_test_set(test_grids: np.ndarray, seed: int, e: str) -> Dict[str, np.nda
     lay, S = layout_of(e), n_slots(e)
     if S == 6:
         t = IS.make_test_set(test_grids, seed, "slots6_train02345")
+    elif e in SUPPLEMENT_CONDITIONS:          # the notebook-16 S=2/3/4 manifests (same words / layouts / grids)
+        t = IS.make_test_set(test_grids, seed, {2: "slots2_train02", 3: "slots3_train023", 4: "slots4_train0234"}[S])
     elif lay == "fixed":
         t = V.make_test_set(test_grids, seed, "identity")
     else:
@@ -187,7 +204,9 @@ def make_test_set(test_grids: np.ndarray, seed: int, e: str) -> Dict[str, np.nda
 
 
 def expected_test_records(e: str, n_grids: int) -> int:
-    g, lay, S, ks = CONDITIONS[e]
+    g, lay, S, ks = ALL_CONDITIONS[e]
+    if g == "fixed_short":
+        return n_grids * (sum(3 ** k for k in ks) + 3 * S)
     if S == 6:
         return n_grids * (361 + 18 + 729)
     if lay == "fixed":
@@ -199,7 +218,7 @@ def expected_test_records(e: str, n_grids: int) -> int:
 
 def required_heldout(e: str) -> Dict[int, int]:
     """Held-out k -> required records per grid in the primary manifest (completion checks reject missing sections)."""
-    g, lay, S, ks = CONDITIONS[e]
+    g, lay, S, ks = ALL_CONDITIONS[e]
     out = {1: 3 * (S if lay == "fixed" else 1)}
     if g in ("fixed5", "variable_with_zero"):
         for k in range(max(ks) + 1, 6):

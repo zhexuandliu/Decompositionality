@@ -879,6 +879,33 @@ the trained k only.
 **Running.** Run all (`RUN_GROUP`, `RUN_CONDITIONS`, `RUN_MODELS`, `RUN_STAGES` select partial reruns). Results go to
 `<RESULTS_ROOT>/ar_row_separators_13conditions_v2/`. Send back `report/seed_42/AR_Row_Separators_Review.ipynb`.
 
+## 20. ROW supplement: fixed S = 2/3/4 identity slots (notebook 19; 6 runs)
+
+[`notebooks/19_ar_row_identity_slots234_supplement.ipynb`](notebooks/19_ar_row_identity_slots234_supplement.ipynb)
+is a standalone supplement. Notebook 18's 26-job registry, condition IDs, config hashes and result root are unchanged.
+
+**Conditions.**
+
+| condition | S | train k | sequence length | test records / model |
+|---|---|---|---|---|
+| identity_s2_train02_row | 2 | 0,2 | 89 | 16,000 |
+| identity_s3_train023_row | 3 | 0,2,3 | 90 | 46,000 |
+| identity_s4_train0234_row | 4 | 0,2,3,4 | 91 | 130,000 |
+
+Both AR models run in each condition: 6 runs, 384,000 evaluation records in total.
+
+**Shared with notebook 18.** Serializer, vocabulary, model config and common initialization (identical tensors);
+42-target loss; digit-CE selection; scoring.
+
+**Pairing.**
+* The logical stream equals the main S5 / variable stream at the same support.
+* Placements and test manifests equal notebook 16's S=2/3/4 no-ROW runs.
+
+**Results.** `<RESULTS_ROOT>/ar_row_slots234_supplement_v1/`.
+* Comparisons with notebook 18 (same support) and notebook 16 (same S, no ROW) are read-only. They use only artifacts
+  with completion markers; missing ones show as pending.
+* Send back `report/seed_42/AR_Row_Slots234_Review.ipynb`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.
