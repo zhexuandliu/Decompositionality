@@ -23,7 +23,7 @@ from . import group as G
 from .artifacts import Run
 from .spec import LEGACY, DiagSpec
 
-ANALYSIS_VERSION = "generalization-failure-diagnostics-v2"
+ANALYSIS_VERSION = "generalization-failure-diagnostics-v3"
 
 
 def diagnostic_split(grid_ids: Sequence[int], seed: int) -> Dict[str, np.ndarray]:

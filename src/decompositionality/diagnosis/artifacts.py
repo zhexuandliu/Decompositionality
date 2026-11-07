@@ -78,7 +78,7 @@ def inventory(experiment_dirs: Dict[str, str], regenerated_root: Optional[Path] 
             ev, rn = d / "eval" / m, d / "runs" / m
             rg = (regen / m / "test_predictions.npz") if regen else None
             r = {"experiment": exp, "model": m, "experiment_dir": str(d), "experiment_dir_exists": d.exists(),
-                 "manifest": (d / "manifests" / "heldout_grids.npz").exists(),
+                 "manifest": manifest_file(d).exists(),
                  "original_predictions": (ev / "test_predictions.npz").exists(),
                  "eval_summary": (ev / "eval_summary.json").exists(),
                  "best_checkpoint": (rn / "best.pt").exists(), "last_checkpoint": (rn / "state.pt").exists(),
@@ -175,8 +175,14 @@ def load_experiment_runs(experiment: str, exp_dir: Path, models: Sequence[str], 
     return runs
 
 
+def manifest_file(exp_dir: Path) -> Path:
+    """Per-experiment manifests, or the shared family-level manifests (compact PE experiments)."""
+    p = Path(exp_dir) / "manifests" / "heldout_grids.npz"
+    return p if p.exists() else Path(exp_dir).parent / "manifests" / "heldout_grids.npz"
+
+
 def load_manifest_grids(exp_dir: Path) -> Optional[np.ndarray]:
-    p = exp_dir / "manifests" / "heldout_grids.npz"
+    p = manifest_file(exp_dir)
     if not p.exists():
         return None
     with np.load(p) as z:

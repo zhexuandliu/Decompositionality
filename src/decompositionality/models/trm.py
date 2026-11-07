@@ -44,7 +44,7 @@ import torch.nn.functional as F
 from torch.utils.checkpoint import checkpoint
 
 from .. import tokenization as T
-from .common import GridModel, cell_ce_per_example, count_parameters
+from .common import SEQUENCE_PE_CHOICES, GridModel, SequencePE, apply_rope, cell_ce_per_example, count_parameters
 
 
 @dataclass
@@ -58,6 +58,11 @@ class TRMConfig:
     S_refinements: int = 2      # S: supervised answer refinements
     rms_eps: float = 1e-5
     n_slots: int = 3            # operation slots (legacy 3; mixed-length experiments 5)
+    sequence_pe: str = "learned"   # "learned" (legacy) | "rope" | "sinusoidal" (both nontrainable)
+    pe_base: float = 10000.0
+
+    def __post_init__(self):
+        assert self.sequence_pe in SEQUENCE_PE_CHOICES, self.sequence_pe
 
 
 def trunc_normal_(t: torch.Tensor, std: float, generator=None) -> torch.Tensor:
@@ -93,9 +98,11 @@ class TRMBlock(nn.Module):
         self.gate_up = Linear(d, 2 * cfg.d_ff)
         self.down = Linear(cfg.d_ff, d)
 
-    def forward(self, h, attn_mask):
+    def forward(self, h, attn_mask, cos=None, sin=None):
         B, L, D = h.shape
         q, k, v = self.qkv(h).view(B, L, 3, self.n_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+        if cos is not None:  # RoPE on freshly projected Q/K at EVERY core call (never on the carried y/z states)
+            q, k = apply_rope(q, cos, sin), apply_rope(k, cos, sin)
         a = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask).transpose(1, 2).reshape(B, L, D)
         h = rms_norm(h + self.o(a), self.eps)                     # post-norm
         gate, up = self.gate_up(h).chunk(2, dim=-1)
@@ -114,7 +121,8 @@ class TRM(GridModel):
         self.embed_scale = math.sqrt(d)
         self.tok_emb = nn.Parameter(trunc_normal_(torch.empty(T.NONAR_VOCAB_SIZE, d), std))
         self.type_emb = nn.Parameter(trunc_normal_(torch.empty(2, d), std))
-        self.slot_emb = nn.Parameter(trunc_normal_(torch.empty(cfg.n_slots, d), std))
+        if cfg.sequence_pe == "learned":
+            self.slot_emb = nn.Parameter(trunc_normal_(torch.empty(cfg.n_slots, d), std))
         self.row_emb = nn.Parameter(trunc_normal_(torch.empty(6, d), std))
         self.col_emb = nn.Parameter(trunc_normal_(torch.empty(6, d), std))
         self.core = nn.ModuleList([TRMBlock(cfg) for _ in range(cfg.n_core_layers)])
@@ -122,11 +130,15 @@ class TRM(GridModel):
         g = torch.Generator().manual_seed(12345)
         self.register_buffer("y_init", trunc_normal_(torch.empty(d), 1.0, g), persistent=True)
         self.register_buffer("z_init", trunc_normal_(torch.empty(d), 1.0, g), persistent=True)
+        if cfg.sequence_pe != "learned":
+            self.seq_pe = SequencePE(cfg.sequence_pe, cfg.n_slots + 36, d, d // cfg.n_heads, cfg.pe_base)
+        self.register_buffer("seq_pos", torch.arange(cfg.n_slots + 36), persistent=False)
         cells = torch.arange(36)
         self.register_buffer("rows", cells // 6, persistent=False)
         self.register_buffer("cols", cells % 6, persistent=False)
         self.register_buffer("types", torch.tensor([0] * cfg.n_slots + [1] * 36), persistent=False)
         self.reset_counters()
+        self._rope = None
 
     # -- bookkeeping ---------------------------------------------------------
     def reset_counters(self):
@@ -138,15 +150,22 @@ class TRM(GridModel):
     def _embed(self, batch):
         assert batch["ops"].shape[1] == self.cfg.n_slots, f"expected {self.cfg.n_slots} operation slots"
         tokens = T.grid_token_inputs(batch["ops"], batch["x"])
-        pos = torch.cat([self.slot_emb, self.row_emb[self.rows] + self.col_emb[self.cols]], dim=0)
+        rc = self.row_emb[self.rows] + self.col_emb[self.cols]
+        if self.cfg.sequence_pe == "learned":
+            pos = torch.cat([self.slot_emb, rc], dim=0)
+        else:
+            pos = torch.cat([rc.new_zeros(self.cfg.n_slots, rc.shape[-1]), rc], dim=0)
         emb = self.tok_emb[tokens] + pos + self.type_emb[self.types]
         x = self.embed_scale * 0.7071067811865476 * emb
+        if self.cfg.sequence_pe == "sinusoidal":
+            x = x + self.seq_pe.additive(self.seq_pos).to(x.dtype)   # added ONCE to the input embedding x, scale 1
         mask = (tokens != T.PAD_ID)[:, None, None, :]
         return x, mask
 
     def _core_apply(self, h, mask):
+        cos, sin = self._rope if self._rope is not None else (None, None)
         for blk in self.core:
-            h = blk(h, mask)
+            h = blk(h, mask, cos, sin)
         return h
 
     def net(self, h, injection, mask):
@@ -170,6 +189,7 @@ class TRM(GridModel):
         """Returns the list of S answer logits [B,36,10] (one per supervised refinement).
         States are freshly initialized here for every call (no state carried across inputs)."""
         self.reset_counters()
+        self._rope = self.seq_pe.rotary(self.seq_pos) if self.cfg.sequence_pe == "rope" else None
         x, mask = self._embed(batch)
         B, L, D = x.shape
         y = self.y_init.to(x.dtype).expand(B, L, D)

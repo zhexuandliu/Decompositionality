@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from .. import tokenization as T
-from .common import BlockStack, GridModel, PreNormBlock, cell_ce_per_example, gpt_init, key_padding_mask
+from .common import BlockStack, GridModel, PreNormBlock, SequencePE, cell_ce_per_example, gpt_init, key_padding_mask
 from .transformer import TransformerAR, TransformerConfig
 
 PATCH = 2
@@ -48,13 +48,17 @@ class ViT(GridModel):
         self.op_emb = nn.Embedding(4, d)              # 3 atomic ops + PAD (PAD keys are masked)
         self.patch_proj = nn.Linear(PATCH * PATCH * 10, d)  # 2x2x10 one-hot, order preserved
         self.type_emb = nn.Embedding(2, d)
-        self.slot_emb = nn.Embedding(cfg.n_slots, d)
+        if cfg.sequence_pe == "learned":
+            self.slot_emb = nn.Embedding(cfg.n_slots, d)
         self.prow_emb = nn.Embedding(NP, d)
         self.pcol_emb = nn.Embedding(NP, d)
         self.stack = BlockStack(cfg.depth, cfg.tied, lambda: PreNormBlock(d, cfg.n_heads, cfg.d_ff, cfg.dropout))
         self.ln_f = nn.LayerNorm(d)
         self.head = nn.Linear(d, PATCH * PATCH * 10)  # shared head: 4 cells x 10 logits per patch
         gpt_init(self)
+        if cfg.sequence_pe != "learned":
+            self.seq_pe = SequencePE(cfg.sequence_pe, cfg.n_slots + NP * NP, d, d // cfg.n_heads, cfg.pe_base)
+        self.register_buffer("seq_pos", torch.arange(cfg.n_slots + NP * NP), persistent=False)
         p = torch.arange(NP * NP)
         self.register_buffer("prow", p // NP, persistent=False)
         self.register_buffer("pcol", p % NP, persistent=False)
@@ -68,11 +72,17 @@ class ViT(GridModel):
         B = x.shape[0]
         onehot = F.one_hot(x, 10).to(self.patch_proj.weight.dtype)        # [B,6,6,10]
         patches = patchify(onehot).reshape(B, NP * NP, -1)                # [B,9,40]
-        h_ops = self.op_emb(ops) + self.slot_emb(self.slots)
+        cos = sin = None
+        h_ops = self.op_emb(ops) + self.slot_emb(self.slots) if self.cfg.sequence_pe == "learned" else self.op_emb(ops)
         h_patch = self.patch_proj(patches) + self.prow_emb(self.prow) + self.pcol_emb(self.pcol)
         h = torch.cat([h_ops, h_patch], dim=1) + self.type_emb(self.types)  # [B, n+9, d]
+        if self.cfg.sequence_pe != "learned":
+            add = self.seq_pe.additive(self.seq_pos)
+            if add is not None:
+                h = h + add.to(h.dtype)
+            cos, sin = self.seq_pe.rotary(self.seq_pos)
         valid = torch.cat([ops != 3, torch.ones(B, NP * NP, dtype=torch.bool, device=x.device)], dim=1)
-        h = self.stack(h, valid[:, None, None, :])
+        h = self.stack(h, valid[:, None, None, :], cos, sin)
         out = self.head(self.ln_f(h[:, n:])).view(B, NP * NP, PATCH * PATCH, 10)
         return unpatchify(out).reshape(B, 36, 10)
 

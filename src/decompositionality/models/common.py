@@ -81,6 +81,72 @@ def cell_ce_per_example(logits: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
 
 
 # ---------------------------------------------------------------------------
+# One-dimensional sequence positional encodings (switchable; nontrainable for rope/sinusoidal)
+# ---------------------------------------------------------------------------
+
+SEQUENCE_PE_CHOICES = ("learned", "rope", "sinusoidal")
+
+
+def sinusoidal_table(n_positions: int, d_model: int, base: float = 10000.0) -> torch.Tensor:
+    """Standard fixed table: PE[p, 2i] = sin(p / base^(2i/d)), PE[p, 2i+1] = cos(p / base^(2i/d)).
+    Deterministic (consumes no RNG)."""
+    assert d_model % 2 == 0
+    pos = torch.arange(n_positions, dtype=torch.float64)[:, None]
+    div = base ** (torch.arange(0, d_model, 2, dtype=torch.float64) / d_model)
+    pe = torch.zeros(n_positions, d_model, dtype=torch.float64)
+    pe[:, 0::2] = torch.sin(pos / div)
+    pe[:, 1::2] = torch.cos(pos / div)
+    return pe.float()
+
+
+def rope_tables(n_positions: int, head_dim: int, base: float = 10000.0):
+    """cos/sin tables [n_positions, head_dim] for 1D RoPE using the "rotate_half" pairing convention:
+    channel i is paired with channel i + head_dim/2 and rotated by angle p * base^(-2i/head_dim).
+    All head_dim channels are rotated (head_dim must be even). Deterministic (consumes no RNG)."""
+    assert head_dim % 2 == 0, f"RoPE needs an even head dimension, got {head_dim}"
+    inv = 1.0 / (base ** (torch.arange(0, head_dim, 2, dtype=torch.float64) / head_dim))
+    ang = torch.arange(n_positions, dtype=torch.float64)[:, None] * inv[None, :]
+    emb = torch.cat([ang, ang], dim=-1)
+    return emb.cos().float(), emb.sin().float()
+
+
+def rotate_half(x: torch.Tensor) -> torch.Tensor:
+    x1, x2 = x[..., : x.shape[-1] // 2], x[..., x.shape[-1] // 2:]
+    return torch.cat([-x2, x1], dim=-1)
+
+
+def apply_rope(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor) -> torch.Tensor:
+    """x: [B, H, L, hd]; cos/sin: [L, hd] for the SAME token positions as x (computed in fp32)."""
+    dt = x.dtype
+    xf = x.float()
+    return (xf * cos[None, None] + rotate_half(xf) * sin[None, None]).to(dt)
+
+
+class SequencePE(nn.Module):
+    """Holds the nontrainable 1D sequence-position tables for ``mode`` in {"rope", "sinusoidal"}.
+    ``positions`` are deterministic layout position IDs (identical for both modes)."""
+
+    def __init__(self, mode: str, n_positions: int, d_model: int, head_dim: int, base: float = 10000.0):
+        super().__init__()
+        assert mode in ("rope", "sinusoidal"), mode
+        self.mode, self.base = mode, base
+        if mode == "sinusoidal":
+            self.register_buffer("table", sinusoidal_table(n_positions, d_model, base), persistent=False)
+        else:
+            cos, sin = rope_tables(n_positions, head_dim, base)
+            self.register_buffer("cos", cos, persistent=False)
+            self.register_buffer("sin", sin, persistent=False)
+
+    def additive(self, positions: torch.Tensor):
+        """Sinusoidal vectors to add ONCE at the input embedding (scale 1); None for RoPE."""
+        return self.table[positions] if self.mode == "sinusoidal" else None
+
+    def rotary(self, positions: torch.Tensor):
+        """(cos, sin) for the given positions; None for sinusoidal."""
+        return (self.cos[positions], self.sin[positions]) if self.mode == "rope" else (None, None)
+
+
+# ---------------------------------------------------------------------------
 # Standard pre-norm Transformer block (used by AR, encoder and ViT baselines)
 # ---------------------------------------------------------------------------
 
@@ -93,10 +159,13 @@ class MultiHeadSelfAttention(nn.Module):
         self.proj = nn.Linear(d_model, d_model, bias=bias)
         self.dropout = dropout
 
-    def forward(self, h: torch.Tensor, attn_mask: torch.Tensor) -> torch.Tensor:
-        """attn_mask: bool, broadcastable to [B, H, Lq, Lk]; True = may attend."""
+    def forward(self, h: torch.Tensor, attn_mask: torch.Tensor, cos=None, sin=None) -> torch.Tensor:
+        """attn_mask: bool, broadcastable to [B, H, Lq, Lk]; True = may attend. If ``cos``/``sin`` are given,
+        RoPE rotates the freshly projected Q and K (never V, never the residual stream)."""
         B, L, D = h.shape
         q, k, v = self.qkv(h).view(B, L, 3, self.n_heads, self.head_dim).permute(2, 0, 3, 1, 4)
+        if cos is not None:
+            q, k = apply_rope(q, cos, sin), apply_rope(k, cos, sin)
         out = F.scaled_dot_product_attention(q, k, v, attn_mask=attn_mask,
                                              dropout_p=self.dropout if self.training else 0.0)
         return self.proj(out.transpose(1, 2).reshape(B, L, D))
@@ -111,8 +180,8 @@ class PreNormBlock(nn.Module):
         self.ffn = nn.Sequential(nn.Linear(d_model, d_ff), nn.GELU(), nn.Linear(d_ff, d_model))
         self.drop = nn.Dropout(dropout)
 
-    def forward(self, h: torch.Tensor, attn_mask: torch.Tensor) -> torch.Tensor:
-        h = h + self.drop(self.attn(self.ln1(h), attn_mask))
+    def forward(self, h: torch.Tensor, attn_mask: torch.Tensor, cos=None, sin=None) -> torch.Tensor:
+        h = h + self.drop(self.attn(self.ln1(h), attn_mask, cos, sin))
         return h + self.drop(self.ffn(self.ln2(h)))
 
 
@@ -128,14 +197,14 @@ class BlockStack(nn.Module):
         self.activation_checkpointing = False
         self.block_applications = 0  # counter of executed block applications (last forward)
 
-    def forward(self, h: torch.Tensor, attn_mask: torch.Tensor) -> torch.Tensor:
+    def forward(self, h: torch.Tensor, attn_mask: torch.Tensor, cos=None, sin=None) -> torch.Tensor:
         self.block_applications = 0
         for i in range(self.depth):
             blk = self.blocks[0 if self.tied else i]
             if self.activation_checkpointing and self.training and torch.is_grad_enabled():
-                h = checkpoint(blk, h, attn_mask, use_reentrant=False)
+                h = checkpoint(blk, h, attn_mask, cos, sin, use_reentrant=False)
             else:
-                h = blk(h, attn_mask)
+                h = blk(h, attn_mask, cos, sin)
             self.block_applications += 1
         return h
 

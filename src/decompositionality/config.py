@@ -88,7 +88,19 @@ class ExperimentConfig:
 
     @property
     def experiment_dir(self) -> Path:
-        return Path(self.output_root) / self.experiment
+        from .mixed import COMPACT_DIRS
+        return Path(self.output_root) / COMPACT_DIRS.get(self.experiment, self.experiment)
+
+    @property
+    def manifest_dir(self) -> Path:
+        """Compact PE experiments share ONE manifest folder at the family root; others keep theirs per experiment."""
+        from .mixed import is_compact
+        return Path(self.output_root) / "manifests" if is_compact(self.experiment) else self.experiment_dir / "manifests"
+
+    @property
+    def sequence_pe(self):
+        from .mixed import COMPACT_EXPERIMENTS
+        return COMPACT_EXPERIMENTS.get(self.experiment)
 
     def to_dict(self) -> dict:
         d = asdict(self)
@@ -106,9 +118,10 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
                            models: Optional[List[str]] = None, **train_overrides) -> ExperimentConfig:
     """Full mode = the benchmark defaults. Smoke mode keeps the FULL model architectures
     and only shrinks steps/batch/eval sets for integration testing (never for reporting)."""
-    from .mixed import MIXED_EXPERIMENTS
-    if experiment not in O.TRAIN_SETS and experiment not in MIXED_EXPERIMENTS:
-        raise ValueError(f"experiment must be one of {list(O.TRAIN_SETS) + list(MIXED_EXPERIMENTS)}")
+    from .mixed import COMPACT_EXPERIMENTS, MIXED_EXPERIMENTS
+    known = list(O.TRAIN_SETS) + list(MIXED_EXPERIMENTS) + list(COMPACT_EXPERIMENTS)
+    if experiment not in known:
+        raise ValueError(f"experiment must be one of {known}")
     if mode not in ("full", "smoke"):
         raise ValueError("mode must be 'full' or 'smoke'")
     tc = TrainConfig()
@@ -116,7 +129,7 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     if mode == "smoke":
         tc = replace(tc, **SMOKE_OVERRIDES)
         splits = dict(SMOKE_SPLITS)
-        if experiment in MIXED_EXPERIMENTS:
+        if experiment in MIXED_EXPERIMENTS or experiment in COMPACT_EXPERIMENTS:
             splits["n_test_grids"] = 2   # 2 grids x 364 words = 728 smoke test records
     tc = replace(tc, **train_overrides)
     root = output_root if mode == "full" else str(Path(output_root) / "smoke")

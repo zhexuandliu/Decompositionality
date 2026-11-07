@@ -478,6 +478,95 @@ evidence about any one factor. The two new experiments differ only in their leng
 exposure. With one seed, the comparisons are descriptive only. Poor seen-support fit is not a clean decomposition
 failure. Single-operation success does not by itself identify an internal algorithm.
 
+## 14. Compact left-aligned PE ablation (notebooks 07/08): RoPE vs sinusoidal
+
+[![Open 07 in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/07_train_compact_02345_rope.ipynb)
+[`notebooks/07_train_compact_02345_rope.ipynb`](notebooks/07_train_compact_02345_rope.ipynb) ·
+[![Open 08 in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/zhexuandliu/Decompositionality/blob/main/notebooks/08_train_compact_02345_sinusoidal.ipynb)
+[`notebooks/08_train_compact_02345_sinusoidal.ipynb`](notebooks/08_train_compact_02345_sinusoidal.ipynb)
+
+**Data (identical in both notebooks).** The training distribution is the all-pairs mixed-length support: EMPTY plus
+all 9 / 27 / 81 / 243 words of lengths 2 / 3 / 4 / 5, giving 361 words. Each length gets 20% of samples and words are
+balanced within a length. Single operations are **never** used for training or checkpoint-selection validation. The
+logical example sequence is the same as in notebook 05, except that operations are **compact left-aligned**: the j-th
+operation is always in slot j and the remaining slots are PAD. There is no random placement anywhere: not in training,
+validation, or the primary test. The 5 physical slots keep the grid and output offsets fixed (AR: 82 tokens,
+`<OUTPUT>` at 44, answers 45–80, `<EOS>` 81). Seed 42, 5000 updates × batch 256.
+
+**The only difference between 07 and 08** is the 1D sequence positional encoding of the seven attention models:
+transformer_ar, looped_transformer_ar, transformer_encoder, looped_transformer_encoder, vit, looped_vit and trm. It is
+selected by the model-config field `sequence_pe`:
+* `rope`: standard 1D rotary embedding with theta 10,000 over the full even head dimension (64 for d=384/6 heads,
+  80 for TRM's 640/8). It uses the `rotate_half` pairing, so channel i is paired with i + hd/2. It is applied to the
+  freshly projected Q and K, never V, in **every** attention call, including every tied loop and every TRM core call.
+  It never rotates the carried hidden state.
+* `sinusoidal`: a fixed sin/cos table with base 10,000, added **once** at the input embedding with scale 1 (TRM: added
+  once to the input embedding x, which the existing recurrence re-injects as before). It is not re-added inside
+  loops.
+
+Both variants use the same deterministic layout position IDs and keep the same additive grid row/column (ViT: patch
+row/column) and segment/type embeddings. The learned 1D position/slot tables are removed in both. Corresponding models
+have identical trainable parameters and identical seed-42 initial weights; the PE tables are buffers that consume no
+RNG, and the notebooks verify this before training. So the comparison isolates 1D sequence PE **conditional on the
+shared spatial encoding**; it is not a comparison of 2D schemes.
+
+One caveat: the token embeddings of AR, encoder and ViT are initialised with std 0.02, while sinusoidal vectors have
+unit amplitude. That is the standard, documented "scale 1" choice and it is identical across models, but the
+sinusoidal signal starts out much larger than the token embedding. Unique parameters:
+
+| model | parameters (both PE variants) |
+|---|---:|
+| transformer_ar | 10,670,611 |
+| looped_transformer_ar | 1,798,291 |
+| transformer_encoder | 10,662,154 |
+| looped_transformer_encoder | 1,789,834 |
+| vit | 10,683,304 |
+| looped_vit | 1,810,984 |
+| trm | 9,936,640 |
+
+**Shared CNN controls.** `rescnn_film` and `unet_film` have no attention PE. They are trained once under
+`compact_02345_cnn` in `shared_cnn/`. Whichever notebook runs second reuses them, but only if the configuration hashes
+match. They are reported once and marked n/a for the PE contrast. In total: 14 attention runs + 2 CNN runs = 16 unique
+runs.
+
+**Selection and test.** These follow notebooks 04/05:
+* **Validation:** 1,500 records (300 grids × lengths 0/2/3/4/5), identical for every run. The best checkpoint has the
+  lowest length-macro final-answer CE.
+* **Test:** all 364 words × the 1000 shared test grids, giving 364,000 records per run and 5,824,000 across the 16
+  unique runs. AR decoding is free-running.
+* **Primary metric:** A, B and C separately and as a macro average, with integer counts.
+* All pairs are seen, so there is no unseen-pair category. The singles are the only held-out strings.
+* `EMPTY` is a display label only.
+
+**Diagnostics** (analysis v3) cover:
+* the audit and perfect-predictor check;
+* the 288-element catalog;
+* singleton hypotheses: correct, XX, XC, CX, identity (note that CC is the same transformation as identity), and every
+  original pair, with eligible / unique-matched / conditional / unconditional counts;
+* FIT/DIAG fitted transforms and source maps;
+* composition of fitted single-op maps.
+
+By default the per-example matching is restricted to the 40-word panel (EMPTY + the 39 original words). Per-word
+metrics for all 364 words are always reported.
+
+**Paired RoPE − sinusoidal comparison.** It runs automatically in whichever notebook finds both conditions complete.
+It uses identical (grid, word) test examples with verified identical inputs and targets, and reports, per model,
+operation and length: exact/cell accuracy differences and both-correct / only-RoPE / only-sinusoidal / both-wrong
+counts. It is written to `comparisons/`.
+
+**Outputs.** `/content/drive/MyDrive/decompositionality_results/compact_02345_pe/` contains:
+* `manifests/`: shared across all runs, byte-identical to the legacy test grids (hash `bdf24c327a65…`).
+* `rope/`, `sinusoidal/`, `shared_cnn/`: each with `runs/`, `eval/`, `figures/`, `tables/`, `diagnostics/` and a zip.
+* `comparisons/`.
+
+Smoke mode writes to `compact_02345_pe/smoke/`.
+
+**Limits.**
+* One seed; no seed-robust ranking.
+* Differences from notebooks 04/05 change both the placement distribution and the PE, so they do not isolate
+  placement.
+* Behavioural diagnostics do not identify an internal mechanism.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

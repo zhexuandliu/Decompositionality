@@ -106,7 +106,8 @@ def plot_by_length(gr, out: Path, exp_label: str):
     import pandas as pd
     plt = _plt()
     models = [m for m in MODEL_IDS if m in set(gr.model)]
-    groups = M.MIXED_GROUP_ORDER
+    present = set(gr[gr["n"] > 0]["group"])
+    groups = [g for g in M.MIXED_GROUP_ORDER if g in present]   # drop categories that are empty by design
     fig, axes = plt.subplots(2, 1, figsize=(20, 9))
     rows = []
     for ax, metric in zip(axes, ("exact_acc", "cell_acc")):
@@ -120,7 +121,9 @@ def plot_by_length(gr, out: Path, exp_label: str):
                 if isinstance(v, float) and math.isnan(v):
                     ax.text(x, 0.02, "N/A", rotation=90, fontsize=7, ha="center")
             rows += [{"model": m, "metric": metric, "group": k, "value": v} for k, v in zip(groups, vals)]
-        ax.set_xticks(range(len(groups))); ax.set_xticklabels([M.MIXED_GROUP_LABELS[k] for k in groups], fontsize=8)
+        ax.set_xticks(range(len(groups)))
+        ax.set_xticklabels([M.MIXED_GROUP_LABELS[k].replace("Singles A/B/C (never trained)", "Length 1 = singles A/B/C\n"
+                                                             "(HELD OUT: never trained)") for k in groups], fontsize=8)
         ax.set(ylim=(0, 1.08), ylabel=metric.replace("_", " "),
                title=f"{exp_label}: test {metric.replace('_', ' ')} by effective length / seen status "
                      "(lengths 3-5 are SEEN strings on NEW grids)")
@@ -157,19 +160,23 @@ def plot_unseen_pairs(pw, out: Path, experiment: str, exp_label: str):
     return save_fig(fig, out, "b3_unseen_pairs_AA_BB_CC", sub)
 
 
-def resource_table(exp_dir: Path, out: Path):
+def resource_table(exp_dir: Path, out: Path, sequence_pe: str = None, models=None):
     import dataclasses
     import pandas as pd
     from .models.common import count_parameters
     from .models.registry import build_model, default_config
     rows = []
-    for m in MODEL_IDS:
+    for m in (models or MODEL_IDS):
         cfg = dataclasses.asdict(default_config(m))
         cfg["n_slots"] = M.N_SLOTS
+        if sequence_pe and m not in M.CNN_MODELS:
+            cfg["sequence_pe"] = sequence_pe
         model = build_model(m, cfg)
         n = count_parameters(model)
         info = model.cost_info()
-        row = {"model": m, "display_name": DISPLAY_NAMES[m], "n_slots": M.N_SLOTS, "unique_learned_params": n,
+        row = {"model": m, "display_name": DISPLAY_NAMES[m], "n_slots": M.N_SLOTS,
+               "sequence_pe": cfg.get("sequence_pe", "n/a (CNN)" if m in M.CNN_MODELS else "learned"),
+               "unique_learned_params": n,
                "shared_core_params": model.shared_core_parameters(), "untied_equivalent_params": model.untied_equivalent_parameters(),
                "param_note": "weight-tied (~1.8M unique; NOT a 10M model)" if m in TIED_PAIRS else "",
                **{k: info[k] for k in ("block_applications_per_forward", "core_calls_per_forward", "input_tokens",
@@ -235,16 +242,22 @@ def build_mixed_reports(exp_dir: Path, experiment: str, log=print) -> dict:
     exp_dir = Path(exp_dir)
     fig, tab = exp_dir / "figures", exp_dir / "tables"
     label = {"mixed_02345_distinct_pairs": "Mixed 0/2-5, distinct pairs",
-             "mixed_02345_all_pairs": "Mixed 0/2-5, all pairs"}.get(experiment, experiment)
+             "mixed_02345_all_pairs": "Mixed 0/2-5, all pairs",
+             "compact_02345_rope": "Compact 0/2-5, RoPE (seed 42, best ckpt)",
+             "compact_02345_sinusoidal": "Compact 0/2-5, sinusoidal (seed 42, best ckpt)",
+             "compact_02345_cnn": "Compact 0/2-5, shared CNN controls (no PE switch)"}.get(experiment, experiment)
+    pe = M.COMPACT_EXPERIMENTS.get(experiment) if M.is_compact(experiment) else None
+    models = (M.CNN_MODELS if experiment == "compact_02345_cnn" else M.ATTENTION_MODELS) if M.is_compact(experiment) else None
     res = {"training_curves": plot_training_curves(exp_dir, fig), "length_curves": plot_length_curves(exp_dir, fig),
-           "resource_table": resource_table(exp_dir, tab)}
+           "resource_table": resource_table(exp_dir, tab, pe, models)}
     ms, pw, gr = load_eval_tables(exp_dir)
     if gr is not None:
         pw.to_csv(tab / "test_per_word_all_models.csv", index=False)
         gr.to_csv(tab / "test_groups_all_models.csv", index=False)
         res["singles"] = plot_singles(gr, fig, label)
         res["by_length"] = plot_by_length(gr, fig, label)
-        res["unseen_pairs"] = plot_unseen_pairs(pw, fig, experiment, label)
+        if not M.is_compact(experiment):      # every pair is trained in the compact experiments
+            res["unseen_pairs"] = plot_unseen_pairs(pw, fig, experiment, label)
         df, text = summary_table(exp_dir, tab, experiment)
         res["summary"] = (df, text)
         log(text)

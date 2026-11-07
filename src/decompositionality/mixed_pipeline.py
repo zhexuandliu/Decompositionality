@@ -33,7 +33,7 @@ def prepare_mixed(cfg: ExperimentConfig, repo_dir: Optional[str] = None, legacy_
     seed; they are byte-identical to the legacy manifests when the legacy hash matches (checked if a
     legacy manifest.json path is given)."""
     assert cfg.is_mixed
-    mdir = cfg.experiment_dir / "manifests"
+    mdir = cfg.manifest_dir
     m = load_or_build_manifests(mdir, cfg.train.seed)
     val = M.make_val_set(m.val_grids[: cfg.n_val_grids], cfg.experiment, cfg.train.seed)
     subset = M.subset_by_grids(val, cfg.val_subset_grids)
@@ -44,6 +44,7 @@ def prepare_mixed(cfg: ExperimentConfig, repo_dir: Optional[str] = None, legacy_
         legacy_match = "identical to legacy manifests" if h == m.manifest_hash else "DIFFERENT from legacy manifests"
     cfg.experiment_dir.mkdir(parents=True, exist_ok=True)
     info = {**cfg.to_dict(), "mixed_data_version": M.MIXED_DATA_VERSION, "manifest_hash": m.manifest_hash,
+            "placement": M.placement(cfg.experiment), "sequence_pe": cfg.sequence_pe,
             "legacy_manifest_comparison": legacy_match, "n_val_records": len(val["x"]),
             "n_subset_records": len(subset["x"]), "n_test_records": len(test["x"]),
             "n_training_words": len(cfg.train_strings)}

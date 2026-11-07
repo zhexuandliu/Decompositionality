@@ -204,7 +204,8 @@ def string_classes(cat: "Catalog", labels: Sequence[str], train_labels: Sequence
 # ---------------------------------------------------------------------------
 
 HYPOTHESIS_TYPES = ["identity", "first_op", "last_op", "first_and_last", "first_two", "last_two", "drop_one",
-                    "reverse", "collapse_adjacent", "dedupe_global", "duplicate_single", "original_pair"]
+                    "reverse", "collapse_adjacent", "dedupe_global", "duplicate_single", "X_then_C", "C_then_X",
+                    "original_pair"]
 HYPOTHESIS_DESCRIPTIONS = {
     "identity": "copy the input (execute nothing)",
     "first_op": "execute only the first non-PAD operation",
@@ -217,6 +218,8 @@ HYPOTHESIS_DESCRIPTIONS = {
     "collapse_adjacent": "collapse ADJACENT repetitions (AAB -> AB; ABA unchanged)",
     "dedupe_global": "remove all repeats keeping first-occurrence order (ABA -> AB)",
     "duplicate_single": "execute a single operation twice (length 1 only)",
+    "X_then_C": "single X executed as X followed by C (length 1 only; for C this is CC = identity)",
+    "C_then_X": "single X executed as C followed by X (length 1 only; for C this is CC = identity)",
     "original_pair": "execute one of the ORIGINAL length-two training pairs regardless of the instruction",
 }
 
@@ -238,6 +241,8 @@ def hypotheses_for(word: str, pair_words: Sequence[str]) -> List[dict]:
     out.append(("collapse_adjacent", collapsed if n >= 2 else None))
     out.append(("dedupe_global", "".join(dict.fromkeys(word)) if n >= 2 else None))
     out.append(("duplicate_single", word * 2 if n == 1 else None))
+    out.append(("X_then_C", word + "C" if n == 1 else None))
+    out.append(("C_then_X", "C" + word if n == 1 else None))
     out += [("original_pair", p) for p in pair_words]
     seen, res = set(), []
     for t, w in out:

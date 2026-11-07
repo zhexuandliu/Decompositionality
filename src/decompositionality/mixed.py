@@ -44,6 +44,18 @@ TEST_LENGTHS = (0, 1, 2, 3, 4, 5)
 N_SLOTS = 5
 MIXED_DATA_VERSION = "decomp-mixed02345-v1"
 
+# Compact-layout positional-encoding ablation (notebooks 07/08). Same 361-word all-pairs support and the same
+# length/word/grid schedule as mixed_02345_all_pairs, but operations are ALWAYS left-aligned (no random gaps).
+COMPACT_EXPERIMENTS = {"compact_02345_rope": "rope", "compact_02345_sinusoidal": "sinusoidal",
+                       "compact_02345_cnn": None}      # None = shared CNN controls (no attention PE switch)
+COMPACT_DIRS = {"compact_02345_rope": "rope", "compact_02345_sinusoidal": "sinusoidal", "compact_02345_cnn": "shared_cnn"}
+COMPACT_RESULTS_SUBDIR = "compact_02345_pe"
+COMPACT_DATA_VERSION = "decomp-compact02345-v1"
+LAYOUT_VERSION = "compact_left-v1"
+ATTENTION_MODELS = ["transformer_ar", "looped_transformer_ar", "transformer_encoder", "looped_transformer_encoder",
+                    "vit", "looped_vit", "trm"]
+CNN_MODELS = ["rescnn_film", "unet_film"]
+
 STREAM_LEN = 701
 STREAM_WORD = 711
 STREAM_PAD5 = 721
@@ -53,11 +65,24 @@ COMBOS = {k: list(itertools.combinations(range(N_SLOTS), k)) for k in range(N_SL
 
 
 def is_mixed(experiment: str) -> bool:
-    return experiment in MIXED_EXPERIMENTS
+    """True for every 5-slot mixed-length experiment (random placement 04/05 or compact 07/08)."""
+    return experiment in MIXED_EXPERIMENTS or experiment in COMPACT_EXPERIMENTS
+
+
+def is_compact(experiment: str) -> bool:
+    return experiment in COMPACT_EXPERIMENTS
+
+
+def placement(experiment: str) -> str:
+    return "compact_left" if is_compact(experiment) else "random_order_preserving"
+
+
+def pairset_name(experiment: str) -> str:
+    return "all_pairs" if is_compact(experiment) else MIXED_EXPERIMENTS[experiment]
 
 
 def support(experiment: str) -> Dict[int, List[str]]:
-    pairs = O.TRAIN_SETS[MIXED_EXPERIMENTS[experiment]]
+    pairs = O.TRAIN_SETS[pairset_name(experiment)]
     return {0: [""], 2: list(pairs), 3: words_of_length(3), 4: words_of_length(4), 5: words_of_length(5)}
 
 
@@ -79,7 +104,7 @@ def test_labels() -> List[str]:
 
 
 def pair_set(experiment: str) -> List[str]:
-    return list(O.TRAIN_SETS[MIXED_EXPERIMENTS[experiment]])
+    return list(O.TRAIN_SETS[pairset_name(experiment)])
 
 
 def mixed_group(label: str, experiment: str) -> str:
@@ -133,6 +158,7 @@ class MixedTrainStream:
     def __init__(self, seed: int, experiment: str, effective_batch_size: int, heldout_bytes=None):
         assert is_mixed(experiment)
         self.seed, self.experiment, self.B = int(seed), experiment, int(effective_batch_size)
+        self.compact = is_compact(experiment)
         self.sup = support(experiment)
         self.heldout = set(heldout_bytes or [])
 
@@ -151,7 +177,7 @@ class MixedTrainStream:
             j = int(blk[t])                       # this is the j-th sample of length L
             ck = (L, j // len(ws))
             if ck not in perm_cache:
-                key = [STREAM_WORD, L] + ([_PAIRSET_KEY[MIXED_EXPERIMENTS[self.experiment]]] if L == 2 else [])
+                key = [STREAM_WORD, L] + ([_PAIRSET_KEY[pairset_name(self.experiment)]] if L == 2 else [])
                 perm_cache[ck] = make_rng(self.seed, *key, j // len(ws)).permutation(len(ws))
             words[t] = ws[perm_cache[ck][j % len(ws)]]
         return lens, words
@@ -174,6 +200,10 @@ class MixedTrainStream:
         ops = np.empty((self.B, N_SLOTS), dtype=np.int64)
         placement = np.empty(self.B, dtype=np.int64)
         for t in range(self.B):
+            if self.compact:      # compact left alignment: the j-th operation always sits in slot j
+                placement[t] = 0
+                ops[t] = canonical_slots(words[t])
+                continue
             combos = COMBOS[int(lens[t])]
             k = min(int(u[t] * len(combos)), len(combos) - 1)
             placement[t] = k
@@ -205,7 +235,7 @@ def make_val_set(val_grids: np.ndarray, experiment: str, seed: int) -> Dict[str,
     sup = support(experiment)
     assign = {}
     for L in LENGTHS:
-        key = [L] + ([_PAIRSET_KEY[MIXED_EXPERIMENTS[experiment]]] if L == 2 else [])
+        key = [L] + ([_PAIRSET_KEY[pairset_name(experiment)]] if L == 2 else [])
         assign[L] = _balanced_sequence(seed, key, sup[L], n)
     gid, words, lens = [], [], []
     for g in range(n):

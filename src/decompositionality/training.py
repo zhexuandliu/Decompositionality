@@ -184,6 +184,16 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     base.update(cfg.model_overrides.get(model_id) or {})
     if cfg.n_slots != 3:
         base["n_slots"] = cfg.n_slots
+    from .mixed import CNN_MODELS, is_compact
+    if is_compact(cfg.experiment):
+        pe = cfg.sequence_pe
+        if model_id in CNN_MODELS:
+            if pe is not None:
+                raise ValueError("CNN controls have no attention PE switch; train them in compact_02345_cnn")
+        else:
+            if pe is None:
+                raise ValueError("compact_02345_cnn holds only the shared CNN controls")
+            base["sequence_pe"] = pe
     return base
 
 
@@ -210,6 +220,15 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
         d["n_slots"] = cfg.n_slots
         d["length_schedule"] = list(LENGTHS)
         d["checkpoint_selection"] = "mean final-answer cell CE over the 5 equal-size validation length groups"
+    from .mixed import COMPACT_DATA_VERSION, LAYOUT_VERSION, is_compact
+    if is_compact(cfg.experiment):
+        d["data_version"] = COMPACT_DATA_VERSION
+        d["placement"] = "compact_left"
+        d["layout_version"] = LAYOUT_VERSION
+        d["sequence_pe"] = cfg.sequence_pe or "n/a (CNN control)"
+        d["pe_convention"] = ("rope: rotate_half pairing (i, i+hd/2), theta 10000, full head dim, Q/K only, every attention "
+                              "call; sinusoidal: fixed sin/cos base 10000 added once at input, scale 1; shared additive "
+                              "row/col (or patch row/col) + segment/type embeddings in both")
     d["config_hash"] = stable_hash(d)
     d["model_hash"] = stable_hash({"model_id": model_id, "model_config": mcfg, "params": n_params})
     return d
@@ -298,6 +317,9 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     global_step, best_ce, best_step, elapsed_prev, oom_total = 0, float("inf"), None, 0.0, 0
     if state_path.exists():
         ck = torch.load(state_path, map_location="cpu", weights_only=False)
+        if ck.get("sequence_pe", "learned") != rc["model_config"].get("sequence_pe", "learned"):
+            raise RuntimeError(f"cannot resume {state_path}: checkpoint PE {ck.get('sequence_pe', 'learned')!r} != "
+                               f"{rc['model_config'].get('sequence_pe', 'learned')!r}")
         if ck.get("n_slots", 3) != cfg.n_slots:
             raise RuntimeError(f"cannot resume {state_path}: checkpoint has {ck.get('n_slots', 3)} operation slots, "
                                f"experiment uses {cfg.n_slots}")
@@ -340,6 +362,7 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
             "global_step": global_step, "rng": _rng_state(),
             "data_stream_next_step": global_step,  # stateless stream: next logical batch index
             "best_val_cell_ce": best_ce, "best_step": best_step, "n_slots": cfg.n_slots,
+            "sequence_pe": rc["model_config"].get("sequence_pe", "learned"),
             "config_hash": rc["config_hash"], "model_hash": rc["model_hash"], "data_version": rc["data_version"],
             "manifest_hash": manifests.manifest_hash, "logs": logs,
             "train_seconds": elapsed_prev + (time.time() - t0), "oom_retries": oom_total + runner.oom_retries,
@@ -435,7 +458,8 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     return summary
 
 
-def profile_model(model_id: str, tc: TrainConfig, n_steps: int = 3, log=print, n_slots: int = 3) -> dict:
+def profile_model(model_id: str, tc: TrainConfig, n_steps: int = 3, log=print, n_slots: int = 3,
+                  sequence_pe: str = None) -> dict:
     """Short timing run on DUMMY data (does not touch the training stream) to estimate
     the full-run time. Returns seconds per optimizer step at the probed microbatch."""
     device = resolve_device(tc.device)
@@ -445,6 +469,8 @@ def profile_model(model_id: str, tc: TrainConfig, n_steps: int = 3, log=print, n
     mc = dataclasses.asdict(default_config(model_id))
     if n_slots != 3:
         mc["n_slots"] = n_slots
+    if sequence_pe and "sequence_pe" in mc:
+        mc["sequence_pe"] = sequence_pe
     model = build_model(model_id, mc, seed=tc.seed).to(device)
     opt = make_optimizer(model, tc)
     mb = probe_microbatch(model, tc, device, amp_dtype, log=lambda *_: None)

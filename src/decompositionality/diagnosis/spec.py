@@ -73,17 +73,37 @@ def _mixed_spec() -> DiagSpec:
         controls_words=common, n_slots=M.N_SLOTS)
 
 
+def _compact_spec() -> DiagSpec:
+    from .. import mixed as M
+    common = [EMPTY_LABEL] + list(O.TEST_STRINGS)
+    return DiagSpec(
+        name="compact", experiments=list(M.COMPACT_EXPERIMENTS), words=M.test_labels(), common_panel=common,
+        panel_groups=[("EMPTY", 1), ("Singles", 3), ("Pairs (all seen)", 9), ("Length 3 (all trained)", 27)],
+        group_order=["EMPTY", "singles", "pairs_seen", "len3_seen", "len4_seen", "len5_seen"],
+        group_labels=dict(M.MIXED_GROUP_LABELS, pairs_seen="Pairs (all 9 trained)"),
+        train_labels=M.training_labels, pair_words=M.pair_set, group_fn=lambda e, s: M.mixed_group(s, e),
+        populations={"singletons A/B/C (never trained)": ["singles"], "EMPTY": ["EMPTY"], "pairs_seen": ["pairs_seen"],
+                     "len3_seen": ["len3_seen"]},
+        extra_groups={"single_A": lambda s: s == "A", "single_B": lambda s: s == "B", "single_C": lambda s: s == "C"},
+        paired=("compact_02345_rope", "compact_02345_sinusoidal"),
+        exp_labels={"compact_02345_rope": "Compact, RoPE", "compact_02345_sinusoidal": "Compact, sinusoidal",
+                    "compact_02345_cnn": "Compact, shared CNN controls (no PE switch)"},
+        controls_words=common, n_slots=M.N_SLOTS)
+
+
 def get_spec(name: str) -> DiagSpec:
     if name == "legacy":
         return LEGACY
     if name == "mixed":
         return _mixed_spec()
+    if name == "compact":
+        return _compact_spec()
     raise KeyError(name)
 
 
 def spec_for_experiment(experiment: str) -> DiagSpec:
-    from ..mixed import is_mixed
-    return get_spec("mixed" if is_mixed(experiment) else "legacy")
+    from ..mixed import is_compact, is_mixed
+    return get_spec("compact" if is_compact(experiment) else "mixed" if is_mixed(experiment) else "legacy")
 
 
 def word(label: str) -> str:

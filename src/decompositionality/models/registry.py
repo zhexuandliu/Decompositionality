@@ -55,6 +55,9 @@ def config_dict(model: GridModel) -> dict:
     d = dataclasses.asdict(model.cfg)
     if d.get("n_slots") == 3:
         d.pop("n_slots")
+    if d.get("sequence_pe") == "learned":      # legacy default: omit so legacy hashes are unchanged
+        d.pop("sequence_pe")
+        d.pop("pe_base", None)
     return d
 
 

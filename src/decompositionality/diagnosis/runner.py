@@ -42,6 +42,7 @@ class DiagnosticsConfig:
     example_models: List[str] = field(default_factory=lambda: ["transformer_ar", "transformer_encoder", "trm"])
     example_strings: List[str] = field(default_factory=lambda: ["A", "B", "C", "AA", "ABC", "CBA", "AAA"])
     example_grid_ids: List[int] = field(default_factory=lambda: [0])
+    analysis_words: Optional[List[str]] = None    # restrict the expensive per-example analysis (None = all words)
 
 
 def _save_df(df, path: Path):
@@ -195,6 +196,10 @@ def run_diagnostics(cfg: DiagnosticsConfig, log=print, make_figures: bool = True
         for k, v in ctrl.items():
             _save_df(v, tables / f"09_controls_{k}.csv")
 
+    if cfg.analysis_words:   # audit/metrics above used ALL records; detailed matching uses the declared subset
+        keep = set(cfg.analysis_words)
+        runs_full, runs = runs, [subset_run(r, keep) for r in runs]
+        log(f"Detailed analysis restricted to {len(keep)} declared words (full per-word metrics are in 02_*.csv)")
     T_cache: dict = {}
     per_run = {}
     for r in runs:
@@ -202,7 +207,7 @@ def run_diagnostics(cfg: DiagnosticsConfig, log=print, make_figures: bool = True
             log(f"[{r.key}] attribution SKIPPED (audit failure); see 01_artifact_audit.csv")
             continue
         key = hashlib.sha256(json.dumps([ANALYSIS_VERSION, spec.name, r.meta["file_sha256"].get("predictions"),
-                                         cat.digest(), cfg.split_seed]).encode()).hexdigest()[:16]
+                                         cat.digest(), cfg.split_seed, sorted(cfg.analysis_words or [])]).encode()).hexdigest()[:16]
         cpath = out / "cache" / "runs" / f"{r.experiment}__{r.model}__{key}.pkl"
         if cfg.use_cache and r.meta["file_sha256"].get("predictions") and cpath.exists():
             res = pickle.loads(cpath.read_bytes())
@@ -260,6 +265,16 @@ def run_diagnostics(cfg: DiagnosticsConfig, log=print, make_figures: bool = True
     (out / "provenance.json").write_text(json.dumps(_jsonable(meta), indent=1))
     log(f"Diagnostics written to {out} in {time.time() - t_start:.0f}s")
     return R
+
+
+def subset_run(r, keep: set):
+    """A view of a Run restricted to the given word labels (sorted order preserved)."""
+    import copy
+    m = np.isin(r.string, list(keep))
+    s = copy.copy(r)
+    s.X, s.Y, s.P, s.grid_id, s.string = r.X[m], r.Y[m], r.P[m], r.grid_id[m], r.string[m]
+    s.stored = {k: v[m] for k, v in r.stored.items()}
+    return s
 
 
 def group_summary(ps, spec: DiagSpec):
@@ -339,6 +354,10 @@ def paired_comparison(runs, per_run, spec: DiagSpec):
                 f"alt_generator_exact_{ea}": a["alt_generator_exact"].mean(),
                 f"alt_generator_exact_{eb}": b["alt_generator_exact"].mean(),
                 "identical_prediction_rate": same_pred.mean(),
+                "both_correct": int((a["exact"].values & b["exact"].values).sum()),
+                f"only_{ea}_correct": int((a["exact"].values & ~b["exact"].values).sum()),
+                f"only_{eb}_correct": int((~a["exact"].values & b["exact"].values).sum()),
+                "both_wrong": int((~a["exact"].values & ~b["exact"].values).sum()),
                 "same_unique_wrong_element_rate": ((u1 >= 0) & (u1 == u2) & ~a["exact"].values).mean()})
     df = pd.DataFrame(rows)
     if len(df):
