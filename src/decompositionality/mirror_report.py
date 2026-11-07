@@ -1187,7 +1187,6 @@ class Diagnostics:
 
     # ---- stage 9: export -----------------------------------------------------------------------------------
     def export(self) -> Path:
-        import nbformat as nbf
         shas = sorted((rid, self.found[rid].get("predictions_sha256", "")[:16]) for rid in self.runs)
         aid = hashlib.sha256(json.dumps([VERSION, shas]).encode()).hexdigest()[:12]
         out = self.out_root / aid
@@ -1208,11 +1207,25 @@ class Diagnostics:
             lines += [r["question"], "  observed: " + r["observed (counts / denominators)"], "  status: " + r["status"],
                       "  competing: " + r["competing explanations"], ""]
         (out / "diagnostic_summary.txt").write_text("\n".join(lines))
-        # HTML
-        html = ["<html><head><meta charset='utf-8'><title>AR identity diagnostics</title><style>body{font-family:sans-serif;"
+        rp = write_review(self.R.items, out, f"AR identity / mirror diagnostics ({aid})",
+                          f"# AR identity / mirror diagnostics — review snapshot\n\nAnalysis `{aid}`, version `{VERSION}`. "
+                          f"All outputs are baked in; do NOT run cells (no Drive needed). Runs analysed: {len(self.runs)}.",
+                          "AR_Identity_Diagnostics_Review.ipynb")
+        self.review_path = rp
+        self.log(f"exports -> {out}\nreview notebook: {rp} ({rp.stat().st_size / 2**20:.2f} MiB)")
+        return rp
+
+
+def write_review(items, out: Path, title: str, intro_md: str, name: str) -> Path:
+    """diagnostic_report.html + a self-contained review notebook (baked outputs, nothing to execute)."""
+    import nbformat as nbf
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    if True:
+        html = ["<html><head><meta charset='utf-8'><title>report</title><style>body{font-family:sans-serif;"
                 "max-width:1400px;margin:auto}table{border-collapse:collapse;font-size:11px}td,th{border:1px solid #ccc;"
-                "padding:2px 4px}</style></head><body>", f"<h1>AR identity / mirror diagnostics ({aid})</h1>"]
-        for it in self.R.items:
+                "padding:2px 4px}</style></head><body>", f"<h1>{title}</h1>"]
+        for it in items:
             if it[0] == "md":
                 html.append("<div>" + it[1].replace("\n", "<br>") + "</div>")
             elif it[0] == "table":
@@ -1223,10 +1236,8 @@ class Diagnostics:
         (out / "diagnostic_report.html").write_text("\n".join(html))
         # self-contained review notebook (baked outputs; nothing to execute)
         nb = nbf.v4.new_notebook()
-        cells = [nbf.v4.new_markdown_cell(f"# AR identity / mirror diagnostics — review snapshot\n\nAnalysis `{aid}`, "
-                                          f"version `{VERSION}`. All outputs are baked in; do NOT run cells (no Drive "
-                                          f"needed). Runs analysed: {len(self.runs)}.")]
-        for it in self.R.items:
+        cells = [nbf.v4.new_markdown_cell(intro_md)]
+        for it in items:
             if it[0] == "md":
                 cells.append(nbf.v4.new_markdown_cell(it[1]))
             elif it[0] == "table":
@@ -1242,8 +1253,6 @@ class Diagnostics:
                 cells.append(c)
         nb.cells = cells
         nbf.validate(nb)
-        rp = out / "AR_Identity_Diagnostics_Review.ipynb"
+        rp = out / name
         nbf.write(nb, rp)
-        self.review_path = rp
-        self.log(f"exports -> {out}\nreview notebook: {rp} ({rp.stat().st_size / 2**20:.2f} MiB)")
         return rp

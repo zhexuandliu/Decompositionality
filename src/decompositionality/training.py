@@ -189,6 +189,10 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     from .idext import is_idext
     from .idslot import is_idslot
     from .idvar import condition_of, is_idvar
+    from .rowsep import is_rowsep, model_config as rowsep_model_config
+    if is_rowsep(cfg.experiment):
+        # ONE config for all 13 row-separator conditions: <ROW> vocabulary, 93-position table, learned positions
+        return rowsep_model_config(model_id, cfg.model_overrides.get(model_id))
     if is_idslot(cfg.experiment):
         # identity format, S visible slots; positional capacity 6 shared by all four conditions ("variable" only
         # means "accepts fewer than n_slots real tokens": every input here has exactly S tokens, no PAD)
@@ -259,6 +263,18 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
         d["initialization"] = ("historical S=5 identity init (seed) with position table grown 82->83 rows; added row "
                                "from a separate generator")
         d["checkpoint_selection"] = "mean answer-digit CE (EOS excluded) over the training k validation groups"
+    from . import rowsep as RS
+    if RS.is_rowsep(cfg.experiment):
+        e = cfg.experiment
+        d["data_version"] = RS.ROWSEP_DATA_VERSION
+        d["group"], d["layout"], d["S"] = RS.group_of(e), RS.layout_of(e), RS.n_slots(e)
+        d["train_ks"] = list(RS.train_ks(e))
+        d["row_layout"] = RS.ROW_LAYOUT_SPEC
+        d["loss"] = "mean CE over 42 supervised targets per example (36 digits + 5 ROW + EOS), mean over batch"
+        d["checkpoint_selection"] = "mean teacher-forced answer-DIGIT CE (no ROW/EOS) over the training-k validation groups"
+        d["initialization"] = (f"legacy seeded random init (5-slot identity AR) + new rows from Generator(seed*1000+"
+                               f"{RS.INIT_SEED_OFFSET}); common to all 13 conditions")
+        d["stream"] = "idext.record(seed,k,j) per-k indexed; idext per-update allocation/order; layout per condition"
     from .idext import IDEXT_DATA_VERSION, is_idext, per_update_counts, train_ks
     if is_idext(cfg.experiment):
         d["data_version"] = IDEXT_DATA_VERSION
@@ -353,7 +369,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
                            "or choose a new output directory (existing runs are never silently overwritten).")
 
     model = build_model(model_id, rc["model_config"], seed=tc.seed)
-    if cfg.is_idslot:   # common fresh init across the four slot-count conditions (grown S=5 init)
+    if cfg.is_rowsep:   # ONE common fresh init across the 13 row-separator conditions
+        from .rowsep import common_initial_state
+        model.load_state_dict(common_initial_state(model_id, tc.seed, cfg.model_overrides.get(model_id))[0])
+    elif cfg.is_idslot:   # common fresh init across the four slot-count conditions (grown S=5 init)
         from .idslot import grown_initial_state
         model.load_state_dict(grown_initial_state(model_id, tc.seed))
     model = model.to(device)
@@ -398,7 +417,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    if cfg.is_idslot:
+    if cfg.is_rowsep:
+        from .rowsep import RowStream
+        stream = RowStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
+    elif cfg.is_idslot:
         from .idslot import SlotStream
         stream = SlotStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
     elif cfg.is_idext:

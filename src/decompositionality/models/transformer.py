@@ -28,6 +28,7 @@ class TransformerConfig:
     pe_base: float = 10000.0
     identity_token: bool = False   # vocabulary includes the visible, learnable <identity> operation
     op_format: str = "fixed"       # "fixed" (exactly n_slots op tokens) | "variable" (0..n_slots real tokens, no PAD)
+    row_sep: bool = False          # AR only: <ROW> separators between grid rows in input AND output (41-token grids)
 
     def __post_init__(self):
         assert self.sequence_pe in SEQUENCE_PE_CHOICES, self.sequence_pe
@@ -46,9 +47,12 @@ class TransformerAR(GridModel):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         d = cfg.d_model
-        self.layout = T.ARLayout(cfg.n_slots)
+        self._layout_cls = T.ARRowLayout if cfg.row_sep else T.ARLayout
+        self.layout = self._layout_cls(cfg.n_slots)
         L = self.layout.length
-        V = T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.VOCAB_SIZE
+        if cfg.row_sep:
+            assert cfg.identity_token, "row-separator models extend the identity vocabulary"
+        V = T.VOCAB_SIZE_ROW if cfg.row_sep else (T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.VOCAB_SIZE)
         self.tok_emb = nn.Embedding(V, d)
         if cfg.sequence_pe == "learned":          # legacy learned absolute 1D position table (max-size)
             self.pos_emb = nn.Embedding(L, d)
@@ -68,7 +72,7 @@ class TransformerAR(GridModel):
         self._meta_cache = {}
 
     def layout_for(self, n_ops: int):
-        return self.layout if n_ops == self.cfg.n_slots else T.ARLayout(n_ops)
+        return self.layout if n_ops == self.cfg.n_slots else self._layout_cls(n_ops)
 
     def _meta(self, n_ops: int, device):
         """Layout metadata (contiguous positions 0..L-1, segments, row/col) for an instruction of n_ops tokens."""
@@ -76,7 +80,7 @@ class TransformerAR(GridModel):
             return {"pos": self.meta_pos, "seg": self.meta_seg, "row": self.meta_row, "col": self.meta_col}
         key = (n_ops, str(device))
         if key not in self._meta_cache:
-            self._meta_cache[key] = {k: v.to(device) for k, v in T.ARLayout(n_ops).metadata().items()}
+            self._meta_cache[key] = {k: v.to(device) for k, v in self._layout_cls(n_ops).metadata().items()}
         return self._meta_cache[key]
 
     def forward_tokens(self, tokens: torch.Tensor, n_ops: int = None) -> torch.Tensor:
@@ -102,7 +106,8 @@ class TransformerAR(GridModel):
 
     def _teacher_forced(self, batch):
         """THE single next-token shift: logits at index t predict token t+1.
-        Returns logits/targets for the 37 supervised positions (36 answer cells + EOS)."""
+        Returns logits/targets for the supervised positions: 36 answer cells + EOS (legacy), or 36 digits + 5 <ROW>
+        + EOS = 42 (row-separator layout), in sequence order."""
         n = self.n_ops_of(batch["ops"])
         lay = self.layout_for(n)
         seq = lay.serialize(batch["ops"], batch["x"], batch["y"])
@@ -114,12 +119,18 @@ class TransformerAR(GridModel):
     def training_loss(self, batch):
         lg, tg = self._teacher_forced(batch)
         ce = F.cross_entropy(lg.float().reshape(-1, lg.shape[-1]), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
-        loss = ce.mean(dim=1).mean()
-        return loss, {"answer_cell_nll": ce[:, :36].mean().detach(), "eos_nll": ce[:, 36].mean().detach()}
+        loss = ce.mean(dim=1).mean()       # plain mean over ALL supervised targets (37 legacy, 42 with <ROW>)
+        lay = self.layout
+        dig = torch.as_tensor(lay.out_digit_offsets, device=ce.device)
+        out = {"answer_cell_nll": ce[:, dig].mean().detach(), "eos_nll": ce[:, lay.n_out].mean().detach()}
+        if lay.row_sep:
+            out["row_nll"] = ce[:, torch.as_tensor(lay.out_row_offsets, device=ce.device)].mean().detach()
+        return loss, out
 
     def val_cell_ce(self, batch):
         lg, tg = self._teacher_forced(batch)
-        return cell_ce_per_example(lg[:, :36], tg[:, :36])  # teacher-forced answer-cell CE, EOS excluded
+        dig = torch.as_tensor(self.layout.out_digit_offsets, device=lg.device)
+        return cell_ce_per_example(lg[:, dig], tg[:, dig])  # teacher-forced answer-DIGIT CE (no EOS / ROW)
 
     @torch.no_grad()
     def predict(self, batch, predict_eos: bool = True):
@@ -130,16 +141,17 @@ class TransformerAR(GridModel):
         lay = self.layout_for(n)
         seq = lay.prefix(batch["ops"], batch["x"])        # the ACTUAL (possibly shorter) prefix ending at <OUTPUT>
         P0 = lay.prefix_len
-        n_steps = 36 + (1 if predict_eos else 0)
-        for _ in range(n_steps):
+        n_out = lay.n_out
+        n_steps = n_out + (1 if predict_eos else 0)
+        for _ in range(n_steps):      # fixed-length rollout; every generated token (incl. ROW/EOS) is fed back
             nxt = self.forward_tokens(seq, n)[:, -1].argmax(dim=-1)
             seq = torch.cat([seq, nxt[:, None]], dim=1)
-        gen = seq[:, P0:P0 + 36]
+        gen = seq[:, P0:P0 + n_out][:, torch.as_tensor(lay.out_digit_offsets, device=seq.device)]
         is_digit = gen < 10
         out = {"pred": torch.where(is_digit, gen, torch.full_like(gen, -1)), "valid": is_digit.all(dim=1),
-               "raw_tokens": gen}
+               "raw_tokens": seq[:, P0:P0 + n_steps] if lay.row_sep else gen}
         if predict_eos:
-            out["eos_ok"] = seq[:, P0 + 36] == T.EOS_ID
+            out["eos_ok"] = seq[:, P0 + n_out] == T.EOS_ID
         return out
 
     def cost_info(self):

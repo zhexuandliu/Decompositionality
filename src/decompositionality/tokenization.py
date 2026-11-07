@@ -44,6 +44,10 @@ TOKEN_NAMES_WITH_IDENTITY = TOKEN_NAMES + ["<identity>"]
 IDENTITY_OP = 4          # slot value
 IDENTITY_ID = 19         # token ID
 VOCAB_SIZE_WITH_IDENTITY = 20
+# Row separator (row-separator experiments only; appended so every earlier ID is unchanged). Structural token: it is
+# neither <identity> nor <PAD>, never an operation, and carries no grid coordinate (row/col = NO_COORD).
+ROW_ID = 20
+VOCAB_SIZE_ROW = 21
 _OP_SLOT_TO_TOKEN = torch.tensor([OP_TOKEN_BASE + 0, OP_TOKEN_BASE + 1, OP_TOKEN_BASE + 2, PAD_ID, IDENTITY_ID])
 
 AR_LEN = 80
@@ -62,6 +66,11 @@ class ARLayout:
     n_slots=3 (legacy): 80 tokens, <OUTPUT> at 42, answers 43..78, <EOS> at 79.
     n_slots=5 (mixed-length experiments): 82 tokens, <OUTPUT> at 44, answers 45..80, <EOS> at 81.
     """
+
+    row_sep = False
+    n_out = 36                                   # output-content tokens after <OUTPUT> (before <EOS>)
+    out_digit_offsets = np.arange(36)            # offsets (from out_start) of the 36 answer digits
+    out_row_offsets = np.zeros(0, dtype=np.int64)
 
     def __init__(self, n_slots: int = 3):
         self.n_slots = int(n_slots)
@@ -111,6 +120,90 @@ class ARLayout:
     def serialize(self, ops: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         B = x.shape[0]
         out = torch.cat([self.prefix(ops, x), y.reshape(B, 36).long(),
+                         torch.full((B, 1), EOS_ID, device=x.device, dtype=torch.long)], dim=1)
+        assert out.shape[1] == self.length
+        return out
+
+
+class ARRowLayout(ARLayout):
+    """AR layout with a <ROW> separator between grid rows, in BOTH input and output (41 tokens per grid)::
+
+        <BOS> <OPS> s_1..s_m <GRID> [r0 ROW r1 ROW r2 ROW r3 ROW r4 ROW r5] <OUTPUT> [same 41-token form] <EOS>
+
+    m = number of operation tokens (S for fixed slots, k for true variable length). Length 87+m; <OUTPUT> at 44+m;
+    prefix length 45+m; output digit (r,c) at 45+m+7r+c; output <ROW> after row r at 51+m+7r; <EOS> at 86+m.
+    Every digit keeps its true (r,c) coordinates; <ROW> tokens have the grid's segment and NO_COORD; sequence
+    positions are dense over the actual sequence (ROW included)."""
+
+    row_sep = True
+    n_out = 41
+    out_digit_offsets = np.array([7 * r + c for r in range(6) for c in range(6)])
+    out_row_offsets = np.array([7 * r + 6 for r in range(5)])
+
+    def __init__(self, n_slots: int):
+        self.n_slots = int(n_slots)
+        m = self.n_slots
+        self.idx_bos, self.idx_ops = 0, 1
+        self.idx_slots = tuple(range(2, 2 + m))
+        self.idx_grid = 2 + m
+        self.in_start = self.idx_grid + 1
+        self.idx_output = self.in_start + 41
+        self.out_start = self.idx_output + 1
+        self.idx_eos = self.out_start + 41
+        self.length = self.idx_eos + 1
+        self.prefix_len = self.idx_output + 1
+        self.input_digit_indices = self.in_start + self.out_digit_offsets
+        self.output_digit_indices = self.out_start + self.out_digit_offsets
+        self.input_row_indices = self.in_start + self.out_row_offsets
+        self.output_row_indices = self.out_start + self.out_row_offsets
+        assert (self.length, self.idx_output, self.prefix_len, self.idx_eos) == (87 + m, 44 + m, 45 + m, 86 + m)
+        assert all(self.output_digit_indices[6 * r + c] == 45 + m + 7 * r + c for r in range(6) for c in range(6))
+        assert all(self.output_row_indices[r] == 51 + m + 7 * r for r in range(5))
+
+    def metadata(self) -> dict:
+        L = self.length
+        seg = np.empty(L, dtype=np.int64)
+        row = np.full(L, NO_COORD, dtype=np.int64)
+        col = np.full(L, NO_COORD, dtype=np.int64)
+        seg[self.idx_bos] = SEG_BOS
+        seg[self.idx_ops] = SEG_OPS_MARK
+        seg[list(self.idx_slots)] = SEG_OP_SLOT
+        seg[self.idx_grid] = SEG_GRID_MARK
+        seg[self.in_start:self.in_start + 41] = SEG_IN       # digits AND <ROW> of the input grid
+        seg[self.idx_output] = SEG_OUT_MARK
+        seg[self.out_start:self.out_start + 41] = SEG_OUT    # digits AND <ROW> of the output grid
+        seg[self.idx_eos] = SEG_EOS
+        rc = np.arange(36)
+        for idx in (self.input_digit_indices, self.output_digit_indices):
+            row[idx] = rc // 6
+            col[idx] = rc % 6
+        return {"pos": torch.arange(L), "seg": torch.from_numpy(seg), "row": torch.from_numpy(row),
+                "col": torch.from_numpy(col)}
+
+    @staticmethod
+    def grid_tokens(g: torch.Tensor) -> torch.Tensor:
+        """[B,6,6] or [B,36] digits -> [B,41] with <ROW> between rows (none after the last row)."""
+        B = g.shape[0]
+        r = g.reshape(B, 6, 6).long()
+        sep = torch.full((B, 6, 1), ROW_ID, dtype=torch.long, device=g.device)
+        return torch.cat([r, sep], dim=2).reshape(B, 42)[:, :41]
+
+    def prefix(self, ops: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+        assert ops.shape[1] == self.n_slots, f"expected {self.n_slots} operation tokens, got {ops.shape[1]}"
+        B, dev = x.shape[0], x.device
+        out = torch.cat([
+            torch.full((B, 1), BOS_ID, device=dev, dtype=torch.long),
+            torch.full((B, 1), OPS_ID, device=dev, dtype=torch.long),
+            op_slots_to_tokens(ops).reshape(B, -1),
+            torch.full((B, 1), GRID_ID, device=dev, dtype=torch.long),
+            self.grid_tokens(x),
+            torch.full((B, 1), OUTPUT_ID, device=dev, dtype=torch.long)], dim=1)
+        assert out.shape[1] == self.prefix_len
+        return out
+
+    def serialize(self, ops: torch.Tensor, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+        B = x.shape[0]
+        out = torch.cat([self.prefix(ops, x), self.grid_tokens(y),
                          torch.full((B, 1), EOS_ID, device=x.device, dtype=torch.long)], dim=1)
         assert out.shape[1] == self.length
         return out

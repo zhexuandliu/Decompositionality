@@ -835,6 +835,50 @@ points the notebook at other locations.
 * The last notebook cell prints its path and downloads it.
 * CSV tables, PNGs, `diagnostic_report.html`, `diagnostic_summary.txt` and `summary.json` sit next to it.
 
+## 19. Row separators: 13 conditions x 2 AR models in one notebook (notebook 18)
+
+[`notebooks/18_ar_row_separators_all_experiments.ipynb`](notebooks/18_ar_row_separators_all_experiments.ipynb):
+26 fresh runs (Transformer AR + Looped AR), seed 42, 5000 x 256 each, learned absolute positions everywhere.
+
+**ROW layout.**
+* A new token `<ROW>` = ID 20 (vocabulary 21; older IDs unchanged) is placed between the rows of BOTH grids: 41
+  tokens per grid, 5 ROW tokens each.
+* For m operation tokens: length 87+m, OUTPUT at 44+m, output digit (r,c) at 45+m+7r+c, output ROW_r at 51+m+7r,
+  EOS at 86+m. All asserted by `tokenization.ARRowLayout`.
+* Digits keep their true (r,c) features; ROW tokens get the grid segment and NO_COORD; positions are dense.
+
+**Conditions.**
+
+| group | conditions | train k | held-out tests |
+|---|---|---|---|
+| fixed5 (5 slots, visible I) | identity_s5_train02/023/0234/02345 | 0,2 … 0,2,3,4,5 | k=1 at all slots + every longer k <= 5 |
+| variable_with_zero (exactly k tokens, k=0 = empty segment) | variable_train02/023/0234/02345 | same | k=1 + longer k <= 5 |
+| fixed6 (6 slots, visible I) | identity_s6_train02345 | 0,2,3,4,5 | k=1 at 6 slots + all 729 k=6 |
+| variable_nozero (no k=0 in training or validation) | variable_nozero_train2/23/234/2345 | 2 … 2,3,4,5 | k=1 (+ seen-support checks) |
+
+* Test records per architecture: 4 x 376,000 + 4 x 364,000 + 1,108,000 + 12,000 + 39,000 + 120,000 + 363,000 =
+  4,602,000.
+
+**Data and initialization.**
+* Logical stream: `idext.record(seed,k,j)` with the rotating per-update allocation. The same support gives an
+  identical ordered stream for S5 / variable / S6. Supports share records per k by index.
+* Removing k=0 redistributes exposure to positive k (no extra budget-matched runs).
+* One common initialization per architecture for all 13 conditions: the legacy seeded random init, with only the new
+  ROW-embedding, head and position rows drawn from a separate generator.
+
+**Loss, selection, scoring.**
+* Loss: mean CE over 42 targets (36 digits + 5 ROW + EOS).
+* Selection: answer-digit CE over the trained k only.
+* Free-running decoding of 41 + 1 tokens, scored at the predeclared positions with no repair.
+  * Exact grid = the 36 digit positions.
+  * Strict = digits + ROW + EOS.
+
+**Historical-selection audit.** The old "over k in 0/2/3/4/5" text was a stale constant label. The code selected on
+the trained k only.
+
+**Running.** Run all (`RUN_GROUP`, `RUN_CONDITIONS`, `RUN_MODELS`, `RUN_STAGES` select partial reruns). Results go to
+`<RESULTS_ROOT>/ar_row_separators_13conditions_v2/`. Send back `report/seed_42/AR_Row_Separators_Review.ipynb`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.
