@@ -87,9 +87,9 @@ def init_audit(seed: int = 42):
     for m in E.IDEXT_MODELS:
         sds = [{k: v.detach().clone() for k, v in build_model(m, model_config(m, "identity"), seed=seed).named_parameters()}
                for _ in EXPS]
-        same = sds[0].keys() == sds[1].keys() and all(torch.equal(sds[0][k], sds[1][k]) for k in sds[0])
+        same = all(sds[0].keys() == s.keys() and all(torch.equal(sds[0][k], s[k]) for k in sds[0]) for s in sds[1:])
         rows.append({"model": m, "unique_params": sum(v.numel() for v in sds[0].values()),
-                     "identical_initial_state_train02_vs_train023": bool(same),
+                     "identical_initial_state_across_all_supports": bool(same),
                      "init_sha256": hashlib.sha256(b"".join(v.numpy().tobytes() for v in sds[0].values())).hexdigest()[:16]})
     return pd.DataFrame(rows)
 
@@ -151,7 +151,7 @@ def transformation_coverage():
     summ = df.groupby(["experiment", "k"]).agg(seen_transform_words=("transform_in_training", "sum"),
                                                words=("string", "size")).reset_index()
     exp = {"idext_train02": [1, 0, 9, 0, 38, 0], "idext_train023": [1, 3, 9, 27, 38, 162]}
-    for e, v in exp.items():
+    for e, v in exp.items():   # reference tables verified for the two original supports; others are computed
         got = summ[summ.experiment == e].sort_values("k").seen_transform_words.tolist()
         assert got == v, (e, got)
     assert df[df.experiment == "idext_train02"].n_training_transforms.iloc[0] == 9
@@ -309,25 +309,29 @@ def analyse_all(root: Path, seed: int = 42, log=print) -> dict:
 
 
 def paired_transitions(runs):
-    """Same model, identical test inputs: train02 -> train023 correctness transitions per k."""
+    """Same model, identical test inputs: correctness transitions per k for every pair of training supports
+    (A = first support, B = second support of the pair)."""
     import pandas as pd
+    import itertools
     rows = []
-    for m in E.IDEXT_MODELS:
-        if ("idext_train02", m) not in runs or ("idext_train023", m) not in runs:
-            rows.append({"model": m, "k": "all", "status": "not yet available"})
+    for (ea, eb), m in itertools.product(itertools.combinations(EXPS, 2), E.IDEXT_MODELS):
+        if (ea, m) not in runs or (eb, m) not in runs:
+            rows.append({"pair": f"{E.IDEXT_DIRS[ea]} vs {E.IDEXT_DIRS[eb]}", "model": m, "k": "all",
+                         "status": "not yet available"})
             continue
-        a, b = runs[("idext_train02", m)], runs[("idext_train023", m)]
+        a, b = runs[(ea, m)], runs[(eb, m)]
         ka = pd.DataFrame({"s": a["string"], "g": a["grid_id"], "p": a["position"], "h": a["grid_hash"], "ea": a["exact"], "k": a["k"]})
         kb = pd.DataFrame({"s": b["string"], "g": b["grid_id"], "p": b["position"], "h": b["grid_hash"], "eb": b["exact"]})
         j = ka.merge(kb, on=["s", "g", "p", "h"], validate="one_to_one")
         assert len(j) == len(ka) == len(kb)
         for k, g in j.groupby("k"):
-            rows.append({"model": m, "k": int(k),
-                         "status_train02": "seen" if k in E.train_ks("idext_train02") else "HELD OUT",
-                         "status_train023": "seen" if k in E.train_ks("idext_train023") else "HELD OUT",
-                         "n": len(g), "train02_exact": int(g.ea.sum()), "train023_exact": int(g.eb.sum()),
-                         "both_correct": int((g.ea & g.eb).sum()), "only_train02_correct": int((g.ea & ~g.eb).sum()),
-                         "only_train023_correct": int((~g.ea & g.eb).sum()), "both_wrong": int((~g.ea & ~g.eb).sum())})
+            da, db = E.IDEXT_DIRS[ea], E.IDEXT_DIRS[eb]
+            rows.append({"pair": f"{da} vs {db}", "model": m, "k": int(k),
+                         f"status_A": "seen" if k in E.train_ks(ea) else "HELD OUT",
+                         f"status_B": "seen" if k in E.train_ks(eb) else "HELD OUT",
+                         "n": len(g), "A_exact": int(g.ea.sum()), "B_exact": int(g.eb.sum()),
+                         "both_correct": int((g.ea & g.eb).sum()), "only_A_correct": int((g.ea & ~g.eb).sum()),
+                         "only_B_correct": int((~g.ea & g.eb).sum()), "both_wrong": int((~g.ea & ~g.eb).sum())})
     return pd.DataFrame(rows)
 
 
@@ -344,7 +348,7 @@ def plot_main(res, out: Path):
     for metric, lab in (("exact_acc", "exact-grid accuracy"), ("cell_acc", "cell accuracy")):
         fig, axes = plt.subplots(1, 2, figsize=(15, 4.8), squeeze=False)
         for ax, m in zip(axes[0], E.IDEXT_MODELS):
-            for e, col in (("idext_train02", "#2a78d6"), ("idext_train023", "#eb6834")):
+            for e, col in (("idext_train02", "#2a78d6"), ("idext_train023", "#eb6834"), ("idext_train0234", "#1baf7a")):
                 s = t[(t.model == m) & (t.experiment == e)].sort_values("k")
                 if not len(s):
                     continue
@@ -390,7 +394,7 @@ def plot_transform_split_and_h(res, out: Path):
     if len(sp):
         fig, axes = plt.subplots(1, 2, figsize=(15, 4.6), squeeze=False)
         for ax, m in zip(axes[0], E.IDEXT_MODELS):
-            for e, col in (("idext_train02", "#2a78d6"), ("idext_train023", "#eb6834")):
+            for e, col in (("idext_train02", "#2a78d6"), ("idext_train023", "#eb6834"), ("idext_train0234", "#1baf7a")):
                 for pres, ls in ((True, "-"), (False, "--")):
                     s = sp[(sp.model == m) & (sp.experiment == e) & (sp.transform_in_training == pres)].sort_values("k")
                     ax.plot(s.k, s.exact_acc, color=col, ls=ls, marker="o",

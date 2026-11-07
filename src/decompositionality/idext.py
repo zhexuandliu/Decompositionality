@@ -5,6 +5,7 @@ successful identity_02345 experiment (notebook 10); only the training SUPPORT ov
 
   idext_train02 : k in {0, 2}      -> 128 + 128 records per update            (640,000 each over 5000 updates)
   idext_train023: k in {0, 2, 3}   -> 85 each + 1 extra rotating 0,2,3,...    (426,667 / 426,667 / 426,666)
+  idext_train0234: k in {0,2,3,4}  -> 64 each per update                      (320,000 each)
 
 Records are indexed WITHIN k: the j-th record of length k is a pure function of (seed, k, j) (word uniform over
 {A,B,C}^k, ordered slot subset uniform over C(5,k), fresh grid). Hence the common k = 0/2 records of the two
@@ -22,8 +23,8 @@ from . import idvar as V
 from .data import STREAM_GRID_RESAMPLE, grid_bytes, make_rng, random_grids
 from .words import to_label, words_of_length
 
-IDEXT_EXPERIMENTS = {"idext_train02": (0, 2), "idext_train023": (0, 2, 3)}
-IDEXT_DIRS = {"idext_train02": "train02", "idext_train023": "train023"}
+IDEXT_EXPERIMENTS = {"idext_train02": (0, 2), "idext_train023": (0, 2, 3), "idext_train0234": (0, 2, 3, 4)}
+IDEXT_DIRS = {"idext_train02": "train02", "idext_train023": "train023", "idext_train0234": "train0234"}
 IDEXT_RESULTS_SUBDIR = "identity_ar_count_extrapolation"
 IDEXT_MODELS = ["transformer_ar", "looped_transformer_ar"]
 IDEXT_DATA_VERSION = "decomp-idext-v1"
@@ -137,6 +138,7 @@ def check_supports() -> dict:
     out = {e: support_counts(e) for e in IDEXT_EXPERIMENTS}
     assert out["idext_train02"] == {"logical_words": 10, "physical_patterns": 91}
     assert out["idext_train023"] == {"logical_words": 37, "physical_patterns": 361}
+    assert out["idext_train0234"] == {"logical_words": 118, "physical_patterns": 766}
     for e in IDEXT_EXPERIMENTS:
         assert 1 not in train_ks(e)
     return out

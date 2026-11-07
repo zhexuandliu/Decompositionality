@@ -712,8 +712,14 @@ descriptively, with overlap counts. It is never a training signal.
 * `artifact_index.json`
 * `comparisons/seed_42/`
 
-**Running.** Each notebook trains both models; rerun it to resume. After both notebooks finish, rerunning only the
-analysis cell gives the joint comparison. One seed; descriptive only.
+**Third support: train0234** ([`notebooks/14_identity_train0234_ar_extrapolation.ipynb`](notebooks/14_identity_train0234_ar_extrapolation.ipynb)).
+* Train k ∈ {0, 2, 3, 4} at 64 records per k per update (320,000 each). Held out: k ∈ {1, 5}.
+* 118 logical words, 766 physical patterns, 62 distinct training transformations.
+* Words whose transformation is in training, per k = 0..5: 1/1, 3/3, 9/9, 27/27, 81/81, 162/243.
+* Same models, initial weights, format, recipe and test manifest as 12/13. Results go to `train0234/seed_42/`.
+
+**Running.** Each notebook trains both models; rerun it to resume. Once the notebooks you need are finished, rerunning
+only the analysis cell gives the joint comparison across all available supports. One seed; descriptive only.
 
 ## 12. Known limitations
 

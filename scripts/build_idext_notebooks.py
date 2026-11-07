@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 NB = {"idext_train02": ("12_identity_train02_ar_extrapolation.ipynb", "{0, 2}", "{1, 3, 4, 5}",
                         "128 + 128 per update (640,000 each)"),
       "idext_train023": ("13_identity_train023_ar_extrapolation.ipynb", "{0, 2, 3}", "{1, 4, 5}",
-                         "85 each + 1 extra rotating 0,2,3 (426,667 / 426,667 / 426,666)")}
+                         "85 each + 1 extra rotating 0,2,3 (426,667 / 426,667 / 426,666)"),
+      "idext_train0234": ("14_identity_train0234_ar_extrapolation.ipynb", "{0, 2, 3, 4}", "{1, 5}",
+                          "64 per k per update (320,000 each)")}
 
 INTRO = """# Operation-count extrapolation in the five-slot identity format — train k ∈ {train}, held out k ∈ {held}
 
@@ -30,8 +32,8 @@ filled by the learnable `<identity>` token. There is no PAD.
   selection.
 * **Test:** the shared notebook-10 manifest (376,000 records, including all 15 singleton placements). AR decoding is
   free-running.
-* **Comparing 12 and 13:** they have the same total budget but different per-k exposure (train023 replaces some
-  k=0/2 exposure with k=3). Initial weights are identical per architecture.
+* **Comparing 12, 13 and 14:** they have the same total budget but different per-k exposure (each larger support
+  replaces some exposure of the smaller k). Initial weights are identical per architecture across all three.
 * **Post-hoc analyses:**
   * training-transformation coverage, since a held-out word can still induce a seen transformation;
   * the even-count ambiguity: with H = shift (3,3), H∘A, H∘B, H∘C reproduce every even-k mapping exactly, so train02
