@@ -123,6 +123,71 @@ def evaluate_last(model_id, ctx, n_grids=1000, k7_grids=300, chunk_grids=50, log
     return a
 
 
+def evaluate_last_sampled(model_id, ctx, plan: dict, chunk_records: int = 25000, log=print) -> dict:
+    """LAST-checkpoint evaluation on the sampled test set (see longk.make_test_sampled). Resumable per record chunk."""
+    import torch
+    from .evaluation import run_model_on_set
+    from .models.registry import build_model
+    from .training import run_config, run_dir, training_complete
+    from .utils import atomic_write_bytes, atomic_write_json, free_memory, resolve_amp_dtype, resolve_device
+    cfg, e = ctx.cfg, ctx.cfg.experiment
+    rc = run_config(cfg, model_id, ctx.manifests.manifest_hash)
+    ed = eval_dir(cfg, model_id)
+    art_f = ed / "ARTIFACT.json"
+    if art_f.exists():
+        a = json.loads(art_f.read_text())
+        if a.get("complete") and a.get("config_hash") == rc["config_hash"] and a.get("plan") == plan:
+            log(f"[{e}/{model_id}] sampled last-checkpoint evaluation already complete -> skipping")
+            return a
+    if not training_complete(cfg, model_id, rc):
+        raise RuntimeError("training not complete")
+    st = torch.load(run_dir(cfg, model_id) / "state.pt", map_location="cpu", weights_only=False)
+    assert st["config_hash"] == rc["config_hash"] and st["global_step"] == cfg.train.optimizer_steps, "not the final state"
+    tc = cfg.train
+    device = resolve_device(tc.device)
+    amp = resolve_amp_dtype(device, tc.dtype)
+    model = build_model(model_id, rc["model_config"]).to(device)
+    model.load_state_dict(st["model"])
+    model.eval()
+    es = LK.make_test_sampled(ctx.manifests.test_grids[: cfg.n_test_grids], tc.seed, e, **plan)
+    n = len(es["x"])
+    cd = ed / "chunks"
+    if cd.exists():
+        for old in cd.glob("chunk_*.npz"):       # a different plan or config invalidates old chunks
+            with np.load(old) as z:
+                if str(z["config_hash"]) != rc["config_hash"] or (str(z["plan"]) if "plan" in z.files else "") != json.dumps(plan, sort_keys=True):
+                    old.unlink()
+    cd.mkdir(parents=True, exist_ok=True)
+    t0 = time.time()
+    starts = list(range(0, n, chunk_records))
+    for ci, r0 in enumerate(starts):
+        f = cd / f"chunk_{ci:03d}.npz"
+        if f.exists():
+            continue
+        idx = np.arange(r0, min(n, r0 + chunk_records))
+        sub = {k: (v[idx] if isinstance(v, np.ndarray) else v) for k, v in es.items()}
+        r = run_model_on_set(model, sub, device, amp, tc.eval_batch_size, want_ce=False)
+        Y = sub["y"].reshape(-1, 36)
+        P = r["pred"].reshape(-1, 36)
+        keep = sub["kind"] == "single"
+        atomic_write_bytes(f, _npz(
+            exact=r["valid"] & (P == Y).all(1), cell=(P == Y).sum(1).astype(np.int8), valid=r["valid"],
+            k=sub["k"].astype(np.int8), kind=sub["kind"].astype("U6"), position=sub["position"].astype(np.int8),
+            grid_id=sub["grid_id"].astype(np.int16), string=sub["string"].astype("U8"), pred=P.astype(np.int8),
+            config_hash=np.array(rc["config_hash"]), plan=np.array(json.dumps(plan, sort_keys=True)),
+            single_input=sub["x"][keep].reshape(-1, 36).astype(np.int8)))
+        log(f"  [{e}/{model_id}] chunk {ci + 1}/{len(starts)} ({len(idx):,} records) | {(time.time() - t0) / 60:.1f} min")
+    del model
+    free_memory()
+    a = {"experiment": e, "model": model_id, "checkpoint": "last", "step": st["global_step"], "best_step": st.get("best_step"),
+         "n_records": n, "expected_records": n, "complete": True, "plan": plan, "evaluation": "sampled",
+         "config_hash": rc["config_hash"], "eval_seconds": time.time() - t0}
+    atomic_write_json(art_f, a)
+    log(f"[{e}/{model_id}] LAST checkpoint (step {st['global_step']}; best was {st.get('best_step')}) evaluated on "
+        f"{n:,} sampled records in {(time.time() - t0) / 60:.1f} min")
+    return a
+
+
 def load_eval(cfg, model_id) -> dict:
     ed = eval_dir(cfg, model_id)
     fs = sorted((ed / "chunks").glob("chunk_*.npz"))
@@ -134,7 +199,7 @@ def load_eval(cfg, model_id) -> dict:
 def status_table(results_root, mode, seed=42, conditions=None, subdir: str = LK.SUBDIR):
     import pandas as pd
     rows = []
-    for e in (conditions or list(LK.CONDITIONS)):
+    for e in (conditions or LK.NB21_CONDITIONS):
         for m in LK.MODELS:
             cfg = make_cfg(e, results_root, mode, [m], seed, subdir)
             d = cfg.experiment_dir
@@ -149,7 +214,8 @@ def status_table(results_root, mode, seed=42, conditions=None, subdir: str = LK.
 
 
 def run_queue(results_root, mode, seed, conditions, models, repo_dir=None, n_grids=1000, k7_grids=300,
-              chunk_grids=50, device="auto", dtype="auto", log=print, subdir: str = LK.SUBDIR, steps=None):
+              chunk_grids=50, device="auto", dtype="auto", log=print, subdir: str = LK.SUBDIR, steps=None,
+              sampled_plan=None):
     from .training import train_model
     from .utils import free_memory
     for e in conditions:
@@ -161,7 +227,10 @@ def run_queue(results_root, mode, seed, conditions, models, repo_dir=None, n_gri
             log(f"\n=== {e} / {m} ===")
             try:
                 train_model(m, cfg, ctx.manifests, ctx.val_set, ctx.subset_set, log=log, repo_dir=repo_dir)
-                evaluate_last(m, ctx, ng, min(k7_grids, ng), min(chunk_grids, ng), log)
+                if sampled_plan:
+                    evaluate_last_sampled(m, ctx, sampled_plan, log=log)
+                else:
+                    evaluate_last(m, ctx, ng, min(k7_grids, ng), min(chunk_grids, ng), log)
             except Exception:
                 traceback.print_exc()
                 log(f"[{e}/{m}] FAILED -> rerun to resume")
@@ -179,7 +248,7 @@ def report(results_root, mode, seed=42, show=True, log=print, conditions=None, s
     from .words import from_label
     G = M.group()
     R = Report(show)
-    conds = conditions or list(LK.CONDITIONS)
+    conds = conditions or LK.NB21_CONDITIONS
     root = family_root(results_root, mode, subdir)
     out = root / "report" / f"seed_{seed}"
     st = status_table(results_root, mode, seed, conds, subdir)

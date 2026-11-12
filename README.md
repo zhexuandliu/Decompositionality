@@ -962,6 +962,23 @@ checkpoint.
 **Results.** A separate folder, `longk_ar_vs_causal_encoder_S7_10k_v1/`, so notebook 21's results are kept. The
 report includes a 5k vs 10k table.
 
+## 24. S=7 support sweep at 20,000 updates with sampled evaluation (notebook 23; 12 runs)
+
+[`notebooks/23_S7_support_sweep_20k.ipynb`](notebooks/23_S7_support_sweep_20k.ipynb)
+
+**Runs.** S=7 identity-filler format with training supports k ∈ {0,2}, {0,2,3}, {0,2,3,4}, {0,2,3,4,5},
+{0,2,3,4,5,6} and {0,2,3,4,5,6,7}, each with {Transformer AR, causal encoder}: 12 runs.
+* 20,000 updates each.
+* One initialization per architecture.
+
+**Evaluation.** The LAST checkpoint, on a sampled test set (`longk.make_test_sampled`; about 52k–127k records per
+run):
+* singletons at every slot on 1000 grids;
+* 5000 records per trained k;
+* 20,000 records per held-out longer k, with every word covered.
+
+**Results.** `<RESULTS_ROOT>/S7_support_sweep_20k_v1/`. Send back `report/seed_42/S7_Sweep_20k_Review.ipynb`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

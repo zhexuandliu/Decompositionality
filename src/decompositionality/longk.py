@@ -34,7 +34,14 @@ CONDITIONS: Dict[str, tuple] = {
     "S7_k02345": (7, (0, 2, 3, 4, 5)),
     "S7_k023456": (7, (0, 2, 3, 4, 5, 6)),
 }
+# Notebook 23: one S=7 support sweep (20,000 updates, sampled evaluation)
+for _name, _ks in (("S7_k02", (0, 2)), ("S7_k023", (0, 2, 3)), ("S7_k0234", (0, 2, 3, 4)),
+                   ("S7_k0234567", (0, 2, 3, 4, 5, 6, 7))):
+    CONDITIONS[_name] = (7, _ks)
+NB21_CONDITIONS = ["S5_k0234", "S6_k02345", "S7_k02345", "S7_k023456"]
+S7_SWEEP = ["S7_k02", "S7_k023", "S7_k0234", "S7_k02345", "S7_k023456", "S7_k0234567"]
 STREAM_LONG_TEST = 1131
+STREAM_SAMPLED_TEST = 1141
 
 
 def is_longk(e: str) -> bool:
@@ -151,3 +158,34 @@ def model_config(model_id: str, overrides=None) -> dict:
     c.update(overrides or {})
     c.update(n_slots=CAPACITY, op_format="variable", identity_token=True)
     return c
+
+
+def make_test_sampled(test_grids, seed, e, n_single_grids=1000, n_seen_per_k=5000, n_long_per_k=20000):
+    """Sampled evaluation (much cheaper than exhaustive): singletons at EVERY slot on ``n_single_grids`` grids;
+    for every trained k and every held-out longer k, a fixed number of (word, grid) records. Words are cycled through
+    a seeded permutation so every word appears (almost) equally often; grids are drawn uniformly from the test grids;
+    each record gets one uniformly random ordered layout. Deterministic in (seed, condition)."""
+    S, ks = CONDITIONS[e]
+    n_grids = len(test_grids)
+    rows = []
+    for g in range(min(n_single_grids, n_grids)):
+        for op in "ABC":
+            for p in range(S):
+                rows.append((g, op, IS.slots_for(op, (p,), S), "single", p + 1))
+    plan = [(k, n_seen_per_k, "seen") for k in ks] + [(k, n_long_per_k, f"long{k}") for k in heldout_long_ks(e)]
+    for k, n, kind in plan:
+        words = words_of_length(k)
+        rng = make_rng(seed, STREAM_SAMPLED_TEST, S, k)
+        n = min(n, len(words) * n_grids)
+        order = rng.permutation(len(words))
+        gids = rng.integers(0, n_grids, n)
+        for r in range(n):
+            w = words[order[r % len(words)]]
+            rows.append((int(gids[r]), w, IS.slots_for(w, IS.subset(rng, S, k), S), kind, 0))
+    gid = np.array([r[0] for r in rows])
+    words_ = [r[1] for r in rows]
+    x = test_grids[gid].reshape(len(rows), 6, 6).astype(np.uint8)
+    k_ = np.array([len(w) for w in words_])
+    return {"x": x, "y": V.apply_words(x, words_).astype(np.uint8), "slots": np.stack([r[2] for r in rows]),
+            "k": k_, "group": k_, "length": k_, "grid_id": gid, "string": np.array([to_label(w) for w in words_]),
+            "kind": np.array([r[3] for r in rows]), "position": np.array([r[4] for r in rows]), "condition": "identity"}
