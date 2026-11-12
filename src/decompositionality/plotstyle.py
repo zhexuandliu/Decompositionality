@@ -26,6 +26,8 @@ MODEL_STYLE = {
     "ar_slotpos": dict(color="#eda100", hatch=None, ls="-"),
     "ar_digithead": dict(color="#e0457b", hatch=None, ls="-"),
     "ar_slotpos_digithead": dict(color="#555555", hatch=None, ls="-"),
+    "ar_digiteos": dict(color="#e0457b", hatch=None, ls="-"),
+    "ar_slotpos_digiteos": dict(color="#555555", hatch=None, ls="-"),
 }
 # Fixed categorical colors for digit values 0..9 (digits are also printed in every cell).
 DIGIT_COLORS = ["#f2f2f2", "#2a78d6", "#e34948", "#1baf7a", "#eda100", "#8c8c8c",

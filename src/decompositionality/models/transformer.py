@@ -34,6 +34,8 @@ class TransformerConfig:
                                    # embedding instead, every other token keeps only segment + row/col (ablation)
     digit_head: bool = False       # AR only. True = 10-way digit output head, loss on the 36 answer digits only
                                    # (no EOS target), 36 decoding steps (ablation)
+    head_eos: bool = False         # AR only, with digit_head: 11-way head (digits 0-9 + EOS); loss on 36 digits + EOS
+                                   # as in the original AR, 37 decoding steps (ablation)
     out_mode: str = "inplace"      # encoder only: "inplace" (bidirectional; answers read at the input cells) |
                                    # "causal" (36 output query positions after the input; the WHOLE sequence is
                                    # causal; all 36 answers predicted in parallel, nothing fed back) |
@@ -88,11 +90,14 @@ class TransformerAR(GridModel):
             del self.pos_emb
         if cfg.digit_head:
             assert not cfg.row_sep
-            head = nn.Linear(d, 10)                                # init = the original head's digit rows
+            rows = list(range(10)) + ([T.EOS_ID] if cfg.head_eos else [])
+            head = nn.Linear(d, len(rows))                         # init = the original head's digit (+ EOS) rows
             with torch.no_grad():
-                head.weight.copy_(self.head.weight[:10]); head.bias.copy_(self.head.bias[:10])
+                head.weight.copy_(self.head.weight[rows]); head.bias.copy_(self.head.bias[rows])
             self.head = head
-            self.loss_label = "AR teacher-forced NLL (36 answer digits; 10-way head, no EOS)"
+            self.loss_label = ("AR teacher-forced NLL (36 answer digits + EOS; 11-way head)" if cfg.head_eos else
+                               "AR teacher-forced NLL (36 answer digits; 10-way head, no EOS)")
+        assert not cfg.head_eos or cfg.digit_head
         if cfg.sequence_pe != "learned":          # nontrainable; built after init so it consumes no RNG
             self.seq_pe = SequencePE(cfg.sequence_pe, L, d, d // cfg.n_heads, cfg.pe_base)
         meta = self.layout.metadata()
@@ -155,6 +160,10 @@ class TransformerAR(GridModel):
 
     def training_loss(self, batch):
         lg, tg = self._teacher_forced(batch)
+        if self.cfg.head_eos:                        # 36 digits + EOS; EOS token -> class 10
+            tg = torch.where(tg == T.EOS_ID, torch.full_like(tg, 10), tg)
+            ce = F.cross_entropy(lg.float().reshape(-1, 11), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
+            return ce.mean(dim=1).mean(), {"answer_cell_nll": ce[:, :36].mean().detach(), "eos_nll": ce[:, 36].mean().detach()}
         if self.cfg.digit_head:                      # 36 answer digits only (targets are digit tokens 0..9)
             return cell_ce_per_example(lg[:, :36], tg[:, :36]).mean(), {}
         ce = F.cross_entropy(lg.float().reshape(-1, lg.shape[-1]), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
@@ -179,6 +188,16 @@ class TransformerAR(GridModel):
         n = self.n_ops_of(batch["ops"])
         lay = self.layout_for(n)
         seq = lay.prefix(batch["ops"], batch["x"])        # the ACTUAL (possibly shorter) prefix ending at <OUTPUT>
+        if self.cfg.head_eos:                             # 37 steps over {0..9, EOS}; EOS inside the grid = invalid
+            P0 = lay.prefix_len
+            for _ in range(37):
+                c = self.forward_tokens(seq, n)[:, -1].argmax(dim=-1)
+                nxt = torch.where(c == 10, torch.full_like(c, T.EOS_ID), c)
+                seq = torch.cat([seq, nxt[:, None]], dim=1)
+            gen = seq[:, P0:P0 + 36]
+            is_digit = gen < 10
+            return {"pred": torch.where(is_digit, gen, torch.full_like(gen, -1)), "valid": is_digit.all(dim=1),
+                    "raw_tokens": gen, "eos_ok": seq[:, P0 + 36] == T.EOS_ID}
         if self.cfg.digit_head:                           # 36 steps, digits only (always a valid grid), no EOS
             P0 = lay.prefix_len
             for _ in range(36):

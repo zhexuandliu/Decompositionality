@@ -2,8 +2,9 @@
 
   transformer_ar          original (notebook 23b)
   ar_slotpos              no 1-D position table pos(t); op tokens get an op-slot embedding instead
-  ar_digithead            10-way digit output head; loss on the 36 answer digits (no EOS); 36 decoding steps
-  ar_slotpos_digithead    both
+  ar_digiteos             11-way output head (digits 0-9 + EOS); loss on 36 digits + EOS; 37 decoding steps
+  ar_slotpos_digiteos     both
+  (10-way, no-EOS variants ar_digithead / ar_slotpos_digithead are also registered but not run)
   query_ar / causal_encoder   references (notebooks 29b / 23b)
 
 Every ablation shares all other initial tensors with transformer_ar under the same seed (the slot embedding starts
@@ -19,10 +20,11 @@ from . import longk_exp as LX
 
 CONDITION = "S7_k02345"
 SUBDIR = "S7_support_sweep_20k_v1"
-ABLATIONS = ["ar_slotpos", "ar_digithead", "ar_slotpos_digithead"]
-COMPARE = ["transformer_ar", "ar_slotpos", "ar_digithead", "ar_slotpos_digithead", "query_ar", "causal_encoder"]
+ABLATIONS = ["ar_slotpos", "ar_digiteos", "ar_slotpos_digiteos"]
+COMPARE = ["transformer_ar", "ar_slotpos", "ar_digiteos", "ar_slotpos_digiteos", "query_ar", "causal_encoder"]
 LABELS = {"transformer_ar": "original AR", "ar_slotpos": "AR − pos(t)", "ar_digithead": "AR + 10-way head",
-          "ar_slotpos_digithead": "AR − pos(t) + 10-way head", "query_ar": "query AR", "causal_encoder": "causal encoder"}
+          "ar_slotpos_digithead": "AR − pos(t) + 10-way head", "ar_digiteos": "AR + 11-way head (digits+EOS)",
+          "ar_slotpos_digiteos": "AR − pos(t) + 11-way head", "query_ar": "query AR", "causal_encoder": "causal encoder"}
 
 
 def report(results_root, mode="full", seed=42, models=None, show=True, log=print,

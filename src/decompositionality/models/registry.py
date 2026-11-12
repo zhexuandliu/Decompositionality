@@ -26,6 +26,9 @@ _SPECS: Dict[str, tuple] = {
     "ar_slotpos": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False)),
     "ar_digithead": (TransformerAR, lambda: TransformerConfig(tied=False, digit_head=True)),
     "ar_slotpos_digithead": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False, digit_head=True)),
+    "ar_digiteos": (TransformerAR, lambda: TransformerConfig(tied=False, digit_head=True, head_eos=True)),
+    "ar_slotpos_digiteos": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False, digit_head=True,
+                                                                     head_eos=True)),
     "vit": (ViT, lambda: TransformerConfig(tied=False)),
     "looped_vit": (ViT, lambda: TransformerConfig(tied=True)),
     "trm": (TRM, TRMConfig),
@@ -67,7 +70,7 @@ def config_dict(model: GridModel) -> dict:
         d.pop("pe_base", None)
     for key, legacy in (("identity_token", False), ("op_format", "fixed"), ("conditioner", "concat"), ("row_sep", False),
                          ("out_mode", "inplace"), ("aux_vocab", False), ("ar_seq_pos", True),
-                         ("digit_head", False)):
+                         ("digit_head", False), ("head_eos", False)):
         if d.get(key) == legacy:
             d.pop(key)
     return d

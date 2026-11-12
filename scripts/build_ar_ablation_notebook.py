@@ -20,11 +20,12 @@ token-by-token decoding). Each changes one thing, or both:
 | model | change |
 |---|---|
 | `ar_slotpos` | **no 1-D position table pos(t)**; op tokens get an op-slot embedding instead; every other token keeps segment + row/col |
-| `ar_digithead` | **10-way digit output head**; loss on the 36 answer digits only (no EOS target); 36 decoding steps |
-| `ar_slotpos_digithead` | both |
+| `ar_digiteos` | **11-way output head** (digits 0–9 + EOS) instead of the full 20-token vocabulary; loss on 36 digits + EOS and 37 decoding steps, as in the original |
+| `ar_slotpos_digiteos` | both |
 
 Under the same seed, every other tensor starts from exactly the original AR's initial values. The slot embedding
-starts from the original pos(t) rows of the op slots, and the digit head starts from the original head's digit rows.
+starts from the original pos(t) rows of the op slots, and the 11-way head starts from the original head's digit and
+EOS rows.
 Same data stream, 20,000 updates, and sampled evaluation of the LAST checkpoint on the same test records as notebooks
 23 / 29.
 
@@ -43,7 +44,7 @@ CONFIG = r'''# --- CONFIGURATION -----------------------------------------------
 MODE = os.environ.get("DECOMP_MODE", "full")
 SEED = 42
 RUN_CONDITIONS = ["S7_k02345"]
-RUN_MODELS = ["ar_slotpos", "ar_digithead", "ar_slotpos_digithead"]
+RUN_MODELS = ["ar_slotpos", "ar_digiteos", "ar_slotpos_digiteos"]
 STEPS = 20000
 SUBDIR = "S7_support_sweep_20k_v1"                # same folder as notebooks 23 / 27 / 29 (model subfolders differ)
 EVAL_PLAN = {"n_single_grids": 1000, "n_seen_per_k": 5000, "n_long_per_k": 20000}
