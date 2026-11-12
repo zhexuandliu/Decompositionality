@@ -412,16 +412,17 @@ def per_k_accuracy(results_root, mode, seeds, conditions, subdir, models=None):
 
 
 def multiseed_report(results_root, mode="full", seeds=(42, 43, 44), conditions=None, subdir="S7_support_sweep_20k_v1",
-                     show=True, log=print, review_name="S7_Sweep_MultiSeed_Review.ipynb"):
+                     show=True, log=print, review_name="S7_Sweep_MultiSeed_Review.ipynb", models=None, out_name="multiseed"):
     import pandas as pd
     import matplotlib.pyplot as plt
     from .mirror_report import Report, write_review
     conds = conditions or LK.S7_SWEEP
     seeds = list(seeds)
     root = family_root(results_root, mode, subdir)
-    out = root / "report" / "multiseed"
+    models = list(models or LK.MODELS)
+    out = root / "report" / out_name
     R = Report(show)
-    df = per_k_accuracy(results_root, mode, seeds, conds, subdir)
+    df = per_k_accuracy(results_root, mode, seeds, conds, subdir, models)
     avail = df[df.status == "available"]
     st = df.groupby(["condition", "model", "seed"]).status.first().unstack("seed")
     R.md(f"# S=7 support sweep — {len(seeds)} seeds {seeds} (LAST checkpoint, 20,000 updates)\n"
@@ -436,7 +437,7 @@ def multiseed_report(results_root, mode="full", seeds=(42, 43, 44), conditions=N
     per_seed.columns = [f"seed {c}" if isinstance(c, (int, np.integer)) else c for c in per_seed.columns]
     agg = agg.merge(per_seed, on=["condition", "model", "k"])
     R.table("Exact accuracy by condition, model and k: mean ± std over seeds, with each seed", agg.round(4), 200)
-    colors = {"transformer_ar": "#2a78d6", "causal_encoder": "#8e6bd6"}
+    colors = {"transformer_ar": "#2a78d6", "causal_encoder": "#8e6bd6", "query_ar": "#1baf7a"}
     # main figure: one panel per training support
     fig, axes = plt.subplots(2, 3, figsize=(16, 8.5), squeeze=False)
     for ax, e in zip(axes.flat, conds):
@@ -444,7 +445,7 @@ def multiseed_report(results_root, mode="full", seeds=(42, 43, 44), conditions=N
         for kk in ks:
             ax.axvspan(kk - 0.5, kk + 0.5, color="#eeeeee", zorder=0)
         ax.axvline(max(ks) + 0.5, color="#999999", ls="--", lw=1)
-        for m in LK.MODELS:
+        for m in models:
             q = agg[(agg.condition == e) & (agg.model == m)].sort_values("k")
             if not len(q):
                 continue
@@ -467,7 +468,7 @@ def multiseed_report(results_root, mode="full", seeds=(42, 43, 44), conditions=N
     # summary figure: singleton / +1 / +2 vs longest trained k
     fig, axes = plt.subplots(1, 3, figsize=(16, 4.2), squeeze=False)
     for ax, role in zip(axes[0], ("singleton", "+1 step", "+2 step")):
-        for m in LK.MODELS:
+        for m in models:
             q = agg[(agg.model == m) & (agg.role == role)].sort_values("max_train_k")
             if not len(q):
                 continue

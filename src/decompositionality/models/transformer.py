@@ -32,12 +32,15 @@ class TransformerConfig:
     aux_vocab: bool = False        # vocabulary incl. the auxiliary-task tokens (D, E, <main>, <aux>; IDs up to 24)
     out_mode: str = "inplace"      # encoder only: "inplace" (bidirectional; answers read at the input cells) |
                                    # "causal" (36 output query positions after the input; the WHOLE sequence is
-                                   # causal; all 36 answers predicted in parallel, nothing fed back)
+                                   # causal; all 36 answers predicted in parallel, nothing fed back) |
+                                   # "causal_ar" (identical to "causal", except that output position j ALSO receives
+                                   # the digit of cell j-1: the true one in training, its own prediction at test time;
+                                   # decoded cell by cell)
 
     def __post_init__(self):
         assert self.sequence_pe in SEQUENCE_PE_CHOICES, self.sequence_pe
         assert self.op_format in ("fixed", "variable"), self.op_format
-        assert self.out_mode in ("inplace", "causal"), self.out_mode
+        assert self.out_mode in ("inplace", "causal", "causal_ar"), self.out_mode
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +193,10 @@ class TransformerEncoder(GridModel):
         d = cfg.d_model
         self.tok_emb = nn.Embedding(T.VOCAB_SIZE_AUX if cfg.aux_vocab else
                                     (T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.NONAR_VOCAB_SIZE), d)
-        self.causal_out = cfg.out_mode == "causal"
+        self.causal_out = cfg.out_mode in ("causal", "causal_ar")
+        self.feedback = cfg.out_mode == "causal_ar"
+        if self.feedback:
+            self.kind = "ar_query"
         # 0 = operation slot, 1 = grid cell [, 2 = output query]
         self.type_emb = nn.Embedding(3 if self.causal_out else 2, d)
         n = cfg.n_slots
@@ -204,6 +210,9 @@ class TransformerEncoder(GridModel):
         if self.causal_out:
             self.query_emb = nn.Embedding(1, d)   # one learned query vector (+ its output cell's row/col embeddings)
         gpt_init(self)
+        if self.feedback:
+            # created AFTER gpt_init so every other tensor has exactly the causal-encoder initial values (same seed)
+            self.start_emb = nn.Parameter(torch.randn(d) * 0.02)   # "no previous digit" for output position 0
         if cfg.sequence_pe != "learned":
             self.seq_pe = SequencePE(cfg.sequence_pe, n + 36, d, d // cfg.n_heads, cfg.pe_base)
         self.register_buffer("seq_pos", torch.arange(n + 36), persistent=False)
@@ -213,7 +222,8 @@ class TransformerEncoder(GridModel):
         self.register_buffer("slots", torch.arange(n), persistent=False)
         self.register_buffer("types", torch.tensor([0] * n + [1] * 36), persistent=False)
 
-    def logits(self, batch) -> torch.Tensor:
+    def logits(self, batch, prev=None) -> torch.Tensor:
+        """``prev`` (causal_ar only): [B, 36] digit of cell j-1 fed to output position j (index 0 unused)."""
         n = self.n_ops_of(batch["ops"])                               # actual op tokens (= n_slots unless variable)
         N = self.cfg.n_slots
         tokens = T.grid_token_inputs(batch["ops"], batch["x"])          # [B, n+36]
@@ -237,7 +247,13 @@ class TransformerEncoder(GridModel):
             B = tokens.shape[0]
             q = (self.query_emb.weight[0] + self.row_emb(self.rows) + self.col_emb(self.cols)
                  + self.type_emb.weight[2])                                 # [36, d]
-            h = torch.cat([h, q[None].expand(B, -1, -1).to(h.dtype)], dim=1)  # [B, n+72, d]
+            q = q[None].expand(B, -1, -1)
+            if self.feedback:                                              # + digit of the PREVIOUS cell
+                assert prev is not None
+                fb = self.tok_emb(prev.long())                              # [B, 36, d]
+                fb = torch.cat([self.start_emb.expand(B, 1, -1), fb[:, 1:]], dim=1)
+                q = q + fb
+            h = torch.cat([h, q.to(h.dtype)], dim=1)                         # [B, n+72, d]
             L = h.shape[1]
             causal = torch.tril(torch.ones(L, L, dtype=torch.bool, device=h.device))
             keys = torch.cat([key_padding_mask(tokens, T.PAD_ID)[:, 0, 0],
@@ -247,16 +263,33 @@ class TransformerEncoder(GridModel):
         h = self.stack(h, key_padding_mask(tokens, T.PAD_ID), cos, sin)  # no causal mask
         return self.head(self.ln_f(h[:, n:]))                          # [B,36,10]
 
+    def _teacher_prev(self, batch):
+        """prev[:, j] = TRUE digit of cell j-1 (j >= 1); index 0 is replaced by the start vector."""
+        y = batch["y"].reshape(-1, 36).long()
+        return torch.cat([torch.zeros_like(y[:, :1]), y[:, :-1]], dim=1)
+
     def training_loss(self, batch):
-        loss = cell_ce_per_example(self.logits(batch), batch["y"].reshape(-1, 36)).mean()
+        lg = self.logits(batch, self._teacher_prev(batch) if self.feedback else None)
+        loss = cell_ce_per_example(lg, batch["y"].reshape(-1, 36)).mean()
         return loss, {}
 
     def val_cell_ce(self, batch):
-        return cell_ce_per_example(self.logits(batch), batch["y"].reshape(-1, 36))
+        lg = self.logits(batch, self._teacher_prev(batch) if self.feedback else None)
+        return cell_ce_per_example(lg, batch["y"].reshape(-1, 36))   # teacher-forced for causal_ar
 
     @torch.no_grad()
     def predict(self, batch):
-        pred = self.logits(batch).argmax(dim=-1)
+        if not self.feedback:
+            pred = self.logits(batch).argmax(dim=-1)
+        else:                                       # greedy, cell by cell; position j sees its own previous outputs
+            B = batch["x"].shape[0]
+            prev = torch.zeros(B, 36, dtype=torch.long, device=batch["x"].device)
+            pred = torch.zeros_like(prev)
+            for j in range(36):
+                pj = self.logits(batch, prev)[:, j].argmax(dim=-1)
+                pred[:, j] = pj
+                if j + 1 < 36:
+                    prev[:, j + 1] = pj
         return {"pred": pred, "valid": torch.ones(pred.shape[0], dtype=torch.bool, device=pred.device)}
 
     def cost_info(self):

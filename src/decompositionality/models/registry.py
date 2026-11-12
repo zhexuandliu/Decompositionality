@@ -21,6 +21,7 @@ _SPECS: Dict[str, tuple] = {
     "looped_transformer_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=True)),
     "causal_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal")),
     "looped_causal_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=True, out_mode="causal")),
+    "query_ar": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal_ar")),
     "vit": (ViT, lambda: TransformerConfig(tied=False)),
     "looped_vit": (ViT, lambda: TransformerConfig(tied=True)),
     "trm": (TRM, TRMConfig),

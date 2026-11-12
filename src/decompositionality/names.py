@@ -14,11 +14,12 @@ MODEL_IDS = [
 
 # Extra models accepted by experiment configs but NOT part of the default nine-model queue (so legacy notebooks'
 # default queues are unchanged).
-EXTRA_MODEL_IDS = ["causal_encoder", "looped_causal_encoder"]
+EXTRA_MODEL_IDS = ["causal_encoder", "looped_causal_encoder", "query_ar"]
 
 DISPLAY_NAMES = {
     "causal_encoder": "Causal encoder (parallel output queries)",
     "looped_causal_encoder": "Looped causal encoder (tied)",
+    "query_ar": "Query AR (causal encoder + previous-digit feedback, decoded cell by cell)",
     "transformer_ar": "Transformer AR",
     "looped_transformer_ar": "Looped Transformer AR (tied)",
     "transformer_encoder": "Transformer encoder",
