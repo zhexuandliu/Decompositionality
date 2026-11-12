@@ -30,6 +30,10 @@ class TransformerConfig:
     op_format: str = "fixed"       # "fixed" (exactly n_slots op tokens) | "variable" (0..n_slots real tokens, no PAD)
     row_sep: bool = False          # AR only: <ROW> separators between grid rows in input AND output (41-token grids)
     aux_vocab: bool = False        # vocabulary incl. the auxiliary-task tokens (D, E, <main>, <aux>; IDs up to 24)
+    ar_seq_pos: bool = True        # AR only. False = NO 1-D position table pos(t): op tokens get a learned op-SLOT
+                                   # embedding instead, every other token keeps only segment + row/col (ablation)
+    digit_head: bool = False       # AR only. True = 10-way digit output head, loss on the 36 answer digits only
+                                   # (no EOS target), 36 decoding steps (ablation)
     out_mode: str = "inplace"      # encoder only: "inplace" (bidirectional; answers read at the input cells) |
                                    # "causal" (36 output query positions after the input; the WHOLE sequence is
                                    # causal; all 36 answers predicted in parallel, nothing fed back) |
@@ -74,6 +78,21 @@ class TransformerAR(GridModel):
         self.ln_f = nn.LayerNorm(d)
         self.head = nn.Linear(d, V)  # full vocabulary: non-digit outputs are possible (invalid)
         gpt_init(self)
+        # Ablations. Everything is created exactly as in the original AR first, so every shared tensor has the
+        # original initial values under the same seed; the replacements are then carved out of the original tensors.
+        if not cfg.ar_seq_pos:
+            assert cfg.sequence_pe == "learned" and not cfg.row_sep
+            self.slot_emb = nn.Embedding(cfg.n_slots, d)          # init = the original pos(t) rows of the op slots
+            with torch.no_grad():
+                self.slot_emb.weight.copy_(self.pos_emb.weight[list(self.layout.idx_slots)])
+            del self.pos_emb
+        if cfg.digit_head:
+            assert not cfg.row_sep
+            head = nn.Linear(d, 10)                                # init = the original head's digit rows
+            with torch.no_grad():
+                head.weight.copy_(self.head.weight[:10]); head.bias.copy_(self.head.bias[:10])
+            self.head = head
+            self.loss_label = "AR teacher-forced NLL (36 answer digits; 10-way head, no EOS)"
         if cfg.sequence_pe != "learned":          # nontrainable; built after init so it consumes no RNG
             self.seq_pe = SequencePE(cfg.sequence_pe, L, d, d // cfg.n_heads, cfg.pe_base)
         meta = self.layout.metadata()
@@ -100,7 +119,14 @@ class TransformerAR(GridModel):
         B, L = tokens.shape
         meta = self._meta(self.cfg.n_slots if n_ops is None else n_ops, tokens.device)
         cos = sin = None
-        if self.cfg.sequence_pe == "learned":
+        if self.cfg.sequence_pe == "learned" and not self.cfg.ar_seq_pos:     # no pos(t); op-slot embedding
+            h = (self.tok_emb(tokens) + self.seg_emb(meta["seg"][:L])
+                 + self.row_emb(meta["row"][:L]) + self.col_emb(meta["col"][:L]))
+            sl = list(self.layout_for(self.cfg.n_slots if n_ops is None else n_ops).idx_slots)
+            sl = [i for i in sl if i < L]
+            h = h.clone()
+            h[:, sl] = h[:, sl] + self.slot_emb.weight[: len(sl)].to(h.dtype)
+        elif self.cfg.sequence_pe == "learned":
             h = (self.tok_emb(tokens) + self.pos_emb(meta["pos"][:L]) + self.seg_emb(meta["seg"][:L])
                  + self.row_emb(meta["row"][:L]) + self.col_emb(meta["col"][:L]))
         else:
@@ -129,6 +155,8 @@ class TransformerAR(GridModel):
 
     def training_loss(self, batch):
         lg, tg = self._teacher_forced(batch)
+        if self.cfg.digit_head:                      # 36 answer digits only (targets are digit tokens 0..9)
+            return cell_ce_per_example(lg[:, :36], tg[:, :36]).mean(), {}
         ce = F.cross_entropy(lg.float().reshape(-1, lg.shape[-1]), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
         loss = ce.mean(dim=1).mean()       # plain mean over ALL supervised targets (37 legacy, 42 with <ROW>)
         lay = self.layout
@@ -151,6 +179,13 @@ class TransformerAR(GridModel):
         n = self.n_ops_of(batch["ops"])
         lay = self.layout_for(n)
         seq = lay.prefix(batch["ops"], batch["x"])        # the ACTUAL (possibly shorter) prefix ending at <OUTPUT>
+        if self.cfg.digit_head:                           # 36 steps, digits only (always a valid grid), no EOS
+            P0 = lay.prefix_len
+            for _ in range(36):
+                nxt = self.forward_tokens(seq, n)[:, -1].argmax(dim=-1)
+                seq = torch.cat([seq, nxt[:, None]], dim=1)
+            gen = seq[:, P0:P0 + 36]
+            return {"pred": gen, "valid": torch.ones(gen.shape[0], dtype=torch.bool, device=gen.device)}
         P0 = lay.prefix_len
         n_out = lay.n_out
         n_steps = n_out + (1 if predict_eos else 0)
