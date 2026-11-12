@@ -1046,6 +1046,15 @@ unchanged.
 * singleton / +1 / +2 step accuracy vs longest trained k;
 * mean ± std tables.
 
+## 29. Combine the three seeds (notebook 28; read-only)
+
+[`notebooks/28_S7_sweep_combine_seeds.ipynb`](notebooks/28_S7_sweep_combine_seeds.ipynb) combines seed 42
+(notebooks 23a/23b), seed 43 (27a) and seed 44 (27b). It reads saved predictions only.
+
+**Outputs.** Availability, mean ± std tables with per-seed values, accuracy-vs-k curves per training support, the
+singleton / +1 / +2 summary figure, and a compact held-out summary (mean [min, max]). Unfinished seeds are excluded,
+not counted as zero.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.
