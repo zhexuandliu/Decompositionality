@@ -240,7 +240,8 @@ def run_queue(results_root, mode, seed, conditions, models, repo_dir=None, n_gri
 
 
 def report(results_root, mode, seed=42, show=True, log=print, conditions=None, subdir: str = LK.SUBDIR,
-           compare_subdir=None, title_note: str = "", review_name: str = "LongK_AR_vs_CausalEnc_Review.ipynb") -> Path:
+           compare_subdir=None, title_note: str = "", review_name: str = "LongK_AR_vs_CausalEnc_Review.ipynb",
+           out_name: str = None) -> Path:
     import pandas as pd
     import matplotlib.pyplot as plt
     from . import mirror_diag as M
@@ -250,7 +251,7 @@ def report(results_root, mode, seed=42, show=True, log=print, conditions=None, s
     R = Report(show)
     conds = conditions or LK.NB21_CONDITIONS
     root = family_root(results_root, mode, subdir)
-    out = root / "report" / f"seed_{seed}"
+    out = root / "report" / (out_name or f"seed_{seed}")      # separate names let parallel notebooks report safely
     st = status_table(results_root, mode, seed, conds, subdir)
     R.md(f"# Transformer AR vs causal encoder — LAST checkpoint, singletons and longer instructions (seed {seed})\n"
          f"{int(st.complete.sum())}/{len(st)} runs complete. Every number below is for the model after the final "

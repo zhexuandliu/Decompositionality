@@ -10,9 +10,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebooks import BOOTSTRAP  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "23_S7_support_sweep_20k.ipynb"
+PARTS = {"a": ("23a_S7_support_sweep_20k_k02_k023_k0234.ipynb", ["S7_k02", "S7_k023", "S7_k0234"]),
+         "b": ("23b_S7_support_sweep_20k_k02345_k023456_k0234567.ipynb", ["S7_k02345", "S7_k023456", "S7_k0234567"])}
 
-INTRO = """# S=7 support sweep: Transformer AR vs causal encoder, 20,000 updates, sampled evaluation (12 runs)
+INTRO = """# S=7 support sweep, part __PART__ of 2: Transformer AR vs causal encoder, 20,000 updates, sampled evaluation
 
 Seven visible operation slots with `<identity>` fillers. The training support varies; the format, models and recipe
 do not.
@@ -37,13 +38,19 @@ do not.
 
 The sizes are set in the config cell.
 
-**Results.** A separate folder. **Send back `S7_Sweep_20k_Review.ipynb`.**
+**This notebook = part __PART__ of 2: __CONDS_TXT__.** The other half is notebook __OTHER__, and the two can run at
+the same time on two runtimes. They share one results folder, but each condition has its own subfolder, so they do
+not interfere.
+
+**Send back `S7_Sweep_20k_part__PART___Review.ipynb`.** After BOTH halves finish, the optional last cell (in either
+notebook) produces `S7_Sweep_20k_ALL_Review.ipynb` with all 12 runs.
 """
 
 CONFIG = r'''# --- CONFIGURATION -------------------------------------------------------------------------------------------------
 MODE = os.environ.get("DECOMP_MODE", "full")
 SEED = 42
-RUN_CONDITIONS = ["S7_k02", "S7_k023", "S7_k0234", "S7_k02345", "S7_k023456", "S7_k0234567"]
+RUN_CONDITIONS = __CONDS__          # this half of the sweep (the other half runs in notebook __OTHER__)
+ALL_CONDITIONS = ["S7_k02", "S7_k023", "S7_k0234", "S7_k02345", "S7_k023456", "S7_k0234567"]
 RUN_MODELS = ["transformer_ar", "causal_encoder"]
 STEPS = 20000
 SUBDIR = "S7_support_sweep_20k_v1"
@@ -72,9 +79,10 @@ status = LX.run_queue(RESULTS_ROOT, MODE, SEED, RUN_CONDITIONS, RUN_MODELS, repo
 display(status)
 '''
 
-REPORT = r'''# --- Report + review export (reads saved artifacts only) -----------------------------------------------------------
-rp = LX.report(RESULTS_ROOT, MODE, SEED, conditions=RUN_CONDITIONS, subdir=SUBDIR,
-               title_note=f"Budget: {STEPS} updates; sampled evaluation {EVAL_PLAN}.", review_name="S7_Sweep_20k_Review.ipynb")
+REPORT = r'''# --- Report for THIS half + review export (reads saved artifacts only) ---------------------------------------------
+rp = LX.report(RESULTS_ROOT, MODE, SEED, conditions=RUN_CONDITIONS, subdir=SUBDIR, out_name=f"seed_{SEED}_part__PART__",
+               title_note=f"Budget: {STEPS} updates; sampled evaluation {EVAL_PLAN}. Part __PART__ of 2.",
+               review_name="S7_Sweep_20k_part__PART___Review.ipynb")
 print("REVIEW FILE TO SEND BACK:", rp)
 if IN_COLAB:
     from google.colab import files
@@ -82,20 +90,36 @@ if IN_COLAB:
 '''
 
 
-def build() -> Path:
-    p = ROOT / "notebooks" / NAME
+COMBINED = r'''# --- OPTIONAL: combined report for ALL 6 conditions (run after BOTH notebooks 23a and 23b have finished) ---------
+rp_all = LX.report(RESULTS_ROOT, MODE, SEED, conditions=ALL_CONDITIONS, subdir=SUBDIR, out_name=f"seed_{SEED}_all",
+                   title_note=f"Budget: {STEPS} updates; sampled evaluation {EVAL_PLAN}. All 12 runs.",
+                   review_name="S7_Sweep_20k_ALL_Review.ipynb")
+print("COMBINED REVIEW FILE:", rp_all)
+if IN_COLAB:
+    from google.colab import files
+    files.download(str(rp_all))
+'''
+
+
+def build(part: str) -> Path:
+    name, conds = PARTS[part]
+    other = "23b" if part == "a" else "23a"
+    sub = lambda t: (t.replace("__CONDS__", repr(conds)).replace("__OTHER__", other).replace("__PART__", part)
+                     .replace("__CONDS_TXT__", ", ".join(conds)))
+    p = ROOT / "notebooks" / name
     if p.exists() and any(c.get("outputs") for c in nbf.read(p, as_version=4).cells if c.cell_type == "code"):
         raise SystemExit(f"{p.name} contains saved outputs; refusing to overwrite it")
     nb = nbf.v4.new_notebook()
     nb.metadata = {"colab": {"provenance": [], "gpuType": "A100"}, "accelerator": "GPU",
                    "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
                    "language_info": {"name": "python"}}
-    nb.cells = [nbf.v4.new_markdown_cell(INTRO), nbf.v4.new_code_cell(BOOTSTRAP), nbf.v4.new_code_cell(CONFIG),
-                nbf.v4.new_code_cell(DRIVER), nbf.v4.new_code_cell(REPORT)]
+    nb.cells = [nbf.v4.new_markdown_cell(sub(INTRO)), nbf.v4.new_code_cell(BOOTSTRAP), nbf.v4.new_code_cell(sub(CONFIG)),
+                nbf.v4.new_code_cell(DRIVER), nbf.v4.new_code_cell(sub(REPORT)), nbf.v4.new_code_cell(COMBINED)]
     nbf.validate(nb)
     nbf.write(nb, p)
     return p
 
 
 if __name__ == "__main__":
-    print(build())
+    for part in PARTS:
+        print(build(part))

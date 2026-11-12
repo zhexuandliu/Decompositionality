@@ -962,9 +962,16 @@ checkpoint.
 **Results.** A separate folder, `longk_ar_vs_causal_encoder_S7_10k_v1/`, so notebook 21's results are kept. The
 report includes a 5k vs 10k table.
 
-## 24. S=7 support sweep at 20,000 updates with sampled evaluation (notebook 23; 12 runs)
+## 24. S=7 support sweep at 20,000 updates with sampled evaluation (notebooks 23a + 23b; 12 runs)
 
-[`notebooks/23_S7_support_sweep_20k.ipynb`](notebooks/23_S7_support_sweep_20k.ipynb)
+The sweep is split into two halves that can run at the same time on two runtimes:
+* [`notebooks/23a_S7_support_sweep_20k_k02_k023_k0234.ipynb`](notebooks/23a_S7_support_sweep_20k_k02_k023_k0234.ipynb):
+  k02, k023, k0234.
+* [`notebooks/23b_S7_support_sweep_20k_k02345_k023456_k0234567.ipynb`](notebooks/23b_S7_support_sweep_20k_k02345_k023456_k0234567.ipynb):
+  k02345, k023456, k0234567.
+
+Each half writes its own report (`report/seed_42_part{a,b}/`). After both finish, the optional last cell (in either
+notebook) writes the combined report (`report/seed_42_all/S7_Sweep_20k_ALL_Review.ipynb`).
 
 **Runs.** S=7 identity-filler format with training supports k ∈ {0,2}, {0,2,3}, {0,2,3,4}, {0,2,3,4,5},
 {0,2,3,4,5,6} and {0,2,3,4,5,6,7}, each with {Transformer AR, causal encoder}: 12 runs.
@@ -977,7 +984,7 @@ run):
 * 5000 records per trained k;
 * 20,000 records per held-out longer k, with every word covered.
 
-**Results.** `<RESULTS_ROOT>/S7_support_sweep_20k_v1/`. Send back `report/seed_42/S7_Sweep_20k_Review.ipynb`.
+**Results.** `<RESULTS_ROOT>/S7_support_sweep_20k_v1/`. Send back the part reviews, or the combined one.
 
 ## 12. Known limitations
 
