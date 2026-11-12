@@ -1000,6 +1000,17 @@ run):
 
 **Output.** Send back `report/seed_42_longer_k_analysis/S7_LongerK_Analysis_Review.ipynb`.
 
+## 26. S=7 longer-instruction follow-up (notebook 25; read-only)
+
+[`notebooks/25_S7_longer_k_followup.ipynb`](notebooks/25_S7_longer_k_followup.ipynb) covers three analyses:
+1. Causal encoder k=7 success vs word structure: first/last ops, counts, C runs, length after cancelling
+   CC/BBBB/AAAAAA, shortest word for the transform.
+2. Transformer AR k=6 "dropped 5th operation": unambiguous counts, and by letter / slot of op #5 and by identity
+   slot.
+3. Causal encoder k=6 early-identity failures, by number of C and by first operation.
+
+Send back `report/seed_42_longer_k_followup/S7_LongerK_Followup_Review.ipynb`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

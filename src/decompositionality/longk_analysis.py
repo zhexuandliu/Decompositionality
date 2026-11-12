@@ -185,3 +185,164 @@ def analyse(results_root: str, mode: str = "full", seed: int = 42, subdir: str =
                       "S7_LongerK_Analysis_Review.ipynb")
     log(f"REVIEW FILE: {rp}")
     return rp
+
+
+# ---------------------------------------------------------------------------
+# Notebook 25: follow-up analyses
+# ---------------------------------------------------------------------------
+
+def _reduce_cancel(w: str) -> str:
+    """Cancel adjacent identity blocks (CC, BBBB, AAAAAA) repeatedly; a purely syntactic reduction."""
+    prev = None
+    while prev != w:
+        prev = w
+        for blk in ("CC", "BBBB", "AAAAAA"):
+            w = w.replace(blk, "")
+    return w
+
+
+def _max_run(w: str, ch: str) -> int:
+    best = cur = 0
+    for c in w:
+        cur = cur + 1 if c == ch else 0
+        best = max(best, cur)
+    return best
+
+
+def followup(results_root: str, mode: str = "full", seed: int = 42, subdir: str = "S7_support_sweep_20k_v1",
+             show: bool = True, log=print) -> Path:
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from .diagnosis.group import Catalog
+    from .mirror_report import Report, write_review
+    G = M.group()
+    cat = Catalog()
+    R = Report(show)
+    root = LX.family_root(results_root, mode, subdir)
+    out = root / "report" / f"seed_{seed}_longer_k_followup"
+    R.md("# Follow-up analyses of the S=7 longer-instruction results (read-only; LAST checkpoint)\n"
+         "1. Causal encoder, S7_k02345, k=7: which word structures succeed?\n"
+         "2. Transformer AR, S7_k02345, k=6: which operation is 'dropped'?\n"
+         "3. Causal encoder, S7_k02345, k=6: the early-`<identity>` failures.\n"
+         "All groupings are descriptive (groups differ in other word properties too).")
+    T = {}
+    enc, msg_e = _records(results_root, mode, seed, subdir, "S7_k02345", "causal_encoder")
+    ar, msg_a = _records(results_root, mode, seed, subdir, "S7_k02345", "transformer_ar")
+    R.table("Sources", pd.DataFrame([{"run": "S7_k02345/causal_encoder", "status": msg_e},
+                                     {"run": "S7_k02345/transformer_ar", "status": msg_a}]))
+    # ---- 1. per-word structure, encoder k=7 -------------------------------------------------------------------
+    if enc is not None:
+        sel = enc["k"] == 7
+        pw = pd.DataFrame({"word": enc["string"][sel].astype(str), "exact": enc["exact"][sel]}).groupby("word").exact.agg(
+            ["sum", "size", "mean"]).reset_index()
+        pw.columns = ["word", "correct", "records", "acc"]
+        w = pw.word
+        pw["first"] = w.str[0]
+        pw["last"] = w.str[-1]
+        pw["first2"] = w.str[:2]
+        pw["last2"] = w.str[-2:]
+        for ch in "ABC":
+            pw[f"n_{ch}"] = w.str.count(ch)
+        pw["max C run"] = [_max_run(x, "C") for x in w]
+        pw["has CC"] = w.str.contains("CC")
+        red = [_reduce_cancel(x) for x in w]
+        pw["length after cancelling CC/BBBB/AAAAAA"] = [len(x) for x in red]
+        pw["shortest word for the transform"] = [len(cat.words[cat.word_id(x)]) for x in w]
+        pw["status"] = np.where(pw.acc == 1, "always right", np.where(pw.acc == 0, "always wrong", "mixed"))
+        T["enc_k7_per_word"] = pw
+        feats = ["first", "last", "first2", "last2", "n_A", "n_B", "n_C", "max C run", "has CC",
+                 "length after cancelling CC/BBBB/AAAAAA", "shortest word for the transform"]
+        rows = []
+        for f in feats:
+            g = pw.groupby(f).agg(words=("word", "size"), mean_word_acc=("acc", "mean"),
+                                  always_right=("status", lambda s: int((s == "always right").sum())),
+                                  always_wrong=("status", lambda s: int((s == "always wrong").sum()))).reset_index()
+            g.insert(0, "feature", f)
+            g = g.rename(columns={f: "value"})
+            g["value"] = g["value"].astype(str)
+            rows.append(g)
+            # spread of the feature: range of group means (weighted by size >= 20 words)
+        bf = pd.concat(rows, ignore_index=True)
+        T["enc_k7_by_feature"] = bf
+        spread = bf[bf.words >= 20].groupby("feature").mean_word_acc.agg(lambda s: s.max() - s.min()).sort_values(ascending=False)
+        R.table("1a. Causal encoder k=7: how much each word feature separates success (max − min of group mean word "
+                "accuracy, groups with ≥ 20 words)", spread.rename("spread").reset_index(), 20)
+        for f in list(spread.index[:4]) + ["length after cancelling CC/BBBB/AAAAAA", "shortest word for the transform"]:
+            R.table(f"1b. by {f}", bf[bf.feature == f].drop(columns="feature"), 40)
+        R.table("1c. Status counts (each word tested on ~9 grids)", pw.status.value_counts().rename("words").reset_index(), 5)
+        # figure: accuracy vs length after cancellation
+        g = pw.groupby("length after cancelling CC/BBBB/AAAAAA").acc.mean()
+        fig, ax = plt.subplots(figsize=(6, 3))
+        ax.bar(g.index.astype(int), g.values, color="#8e6bd6")
+        ax.set(xlabel="word length after cancelling CC / BBBB / AAAAAA", ylabel="mean word accuracy", ylim=(0, 1.05),
+               title="Causal encoder, S7_k02345, held-out k=7")
+        R.fig(fig, "Encoder k=7 accuracy vs reduced length", out / "figures" / "enc_k7_reduced_length.png")
+    # ---- 2. AR k=6: which op is dropped ------------------------------------------------------------------------
+    if ar is not None:
+        sel = np.flatnonzero((ar["k"] == 6) & ~ar["exact"] & ar["valid"])
+        words = ar["string"][sel].astype(str)
+        X = ar["x"][sel].reshape(-1, 36)
+        P = ar["pred"][sel]
+        slots = ar["slots"][sel]
+        hit = np.zeros((len(sel), 6), bool)
+        for i in range(6):
+            for wd in np.unique(words):
+                q = words == wd
+                p = G.perms[G.word_id(wd[:i] + wd[i + 1:])]
+                hit[q, i] = (X[q][:, p] == P[q]).all(1)
+        unique = hit.sum(1) == 1
+        dropped = np.where(unique, hit.argmax(1), -1)
+        T["ar_k6_drop_unique"] = pd.DataFrame({"dropped op #": np.arange(1, 7),
+                                               "failures where this is the ONLY matching drop": [int((dropped == i).sum()) for i in range(6)],
+                                               "failures matching this drop (incl. ambiguous)": [int(hit[:, i].sum()) for i in range(6)]})
+        R.table("2a. Transformer AR k=6 failures: which operation's removal reproduces the prediction "
+                f"({len(sel)} valid failures; 'only' = unambiguous)", T["ar_k6_drop_unique"], 10)
+        islot = (slots == V.ID_OP).argmax(1) + 1
+        op_slot = np.array([np.flatnonzero(s != V.ID_OP)[4] + 1 for s in slots])     # slot of the 5th operation
+        letter = np.array([wd[4] for wd in words])
+        d5 = hit[:, 4]
+        rows = []
+        for name, key in (("letter of op #5", letter), ("slot of op #5", op_slot), ("<identity> slot", islot)):
+            for v in sorted(set(key.tolist())):
+                q = key == v
+                rows.append({"grouping": name, "value": str(v), "failures": int(q.sum()), "= drop op #5": int(d5[q].sum()),
+                             "share": round(float(d5[q].mean()), 3)})
+        T["ar_k6_drop5_by"] = pd.DataFrame(rows)
+        R.table("2b. 'Drop op #5' share among AR k=6 failures, by the 5th operation's letter / slot and by the identity slot",
+                T["ar_k6_drop5_by"], 40)
+        # also: with the 5th op removed, what remains is a 5-op word: is it the 'first 4 + last 1'?
+        T["ar_k6_note"] = pd.DataFrame([{"note": "drop op #5 = execute ops 1,2,3,4,6 (the last op is kept)"}])
+        R.table("2c. Reading", T["ar_k6_note"], 2)
+    # ---- 3. encoder k=6 early-identity failures ----------------------------------------------------------------
+    if enc is not None:
+        sel = np.flatnonzero(enc["k"] == 6)
+        words = enc["string"][sel].astype(str)
+        ex = enc["exact"][sel]
+        slots = enc["slots"][sel]
+        islot = (slots == V.ID_OP).argmax(1) + 1
+        nC = np.char.count(words, "C")
+        first = np.array([wd[0] for wd in words])
+        rows = []
+        for grp, q0 in (("I in slot 1-3", islot <= 3), ("I in slot 4-7", islot >= 4)):
+            for name, key in (("n_C", nC), ("first op", first)):
+                for v in sorted(set(key.tolist())):
+                    q = q0 & (key == v)
+                    if q.sum() < 30:
+                        continue
+                    rows.append({"layout": grp, "grouping": name, "value": str(v), "records": int(q.sum()),
+                                 "exact_acc": round(float(ex[q].mean()), 4)})
+        for v in range(1, 8):
+            q = islot == v
+            rows.append({"layout": f"I in slot {v}", "grouping": "all", "value": "-", "records": int(q.sum()),
+                         "exact_acc": round(float(ex[q].mean()), 4)})
+        T["enc_k6_early_I"] = pd.DataFrame(rows)
+        R.table("3. Causal encoder k=6: early vs late identity slot, by number of C and by first operation",
+                T["enc_k6_early_I"], 60)
+    (out / "tables").mkdir(parents=True, exist_ok=True)
+    for k_, t in T.items():
+        t.to_csv(out / "tables" / f"{k_}.csv", index=False)
+    rp = write_review(R.items, out, "S=7 longer-instruction follow-up",
+                      "# S=7 longer-instruction follow-up — review snapshot\n\nBaked outputs; nothing to run.",
+                      "S7_LongerK_Followup_Review.ipynb")
+    log(f"REVIEW FILE: {rp}")
+    return rp
