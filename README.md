@@ -986,6 +986,20 @@ run):
 
 **Results.** `<RESULTS_ROOT>/S7_support_sweep_20k_v1/`. Send back the part reviews, or the combined one.
 
+## 25. S=7 longer-instruction analysis (notebook 24; read-only)
+
+[`notebooks/24_S7_longer_k_analysis.ipynb`](notebooks/24_S7_longer_k_analysis.ipynb) reads the saved notebook
+23a/23b predictions; it does not train or re-evaluate.
+
+**Analysed:** S7_k02345 (k=6, k=7) and S7_k023456 (k=7), both models.
+* k=6 accuracy by `<identity>` slot;
+* accuracy by number of C tokens and by training-transform membership;
+* per-word accuracy;
+* failure types;
+* "dropped one operation" matches.
+
+**Output.** Send back `report/seed_42_longer_k_analysis/S7_LongerK_Analysis_Review.ipynb`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.
