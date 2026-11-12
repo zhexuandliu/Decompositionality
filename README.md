@@ -1011,6 +1011,27 @@ run):
 
 Send back `report/seed_42_longer_k_followup/S7_LongerK_Followup_Review.ipynb`.
 
+## 27. Auxiliary-task transfer (notebooks 26a + 26b; 8 runs, run in parallel)
+
+[`26a`](notebooks/26a_aux_task_none_and_k02345.ipynb) runs aux_none and aux_k02345;
+[`26b`](notebooks/26b_aux_task_k0234567_and_k01234567.ipynb) runs aux_k0234567 and aux_k01234567.
+Each condition is run with Transformer AR and the causal encoder, for 20,000 updates.
+
+**Main task.** S=7 A/B/C, trained k ∈ {0,2,3,4,5}; tests: singletons, k=6, k=7. The test set is identical to
+notebook 23's sampled set.
+
+**Auxiliary task.** Value operations D (d+1 mod 10) and E (9−d), which never move a cell.
+* Same slots, fillers and placement as the main task.
+* A task marker leads every instruction, so the instruction has 8 operation tokens.
+* 64 of 256 records per update are auxiliary.
+* Its training k is set per condition, up to 7 and optionally including k=1.
+
+**Vocabulary.** The new token IDs are 21–24. Older IDs and config hashes are unchanged.
+
+**Selection and evaluation.** Checkpoint selection uses the main task only; evaluation uses the LAST checkpoint.
+
+**Results.** `<RESULTS_ROOT>/aux_task_transfer_v1/`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

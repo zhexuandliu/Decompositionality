@@ -88,6 +88,11 @@ class ExperimentConfig:
         return is_rowsep(self.experiment)
 
     @property
+    def is_auxtask(self) -> bool:
+        from .auxtask import is_auxtask
+        return is_auxtask(self.experiment)
+
+    @property
     def is_longk(self) -> bool:
         from .longk import is_longk
         return is_longk(self.experiment)
@@ -102,6 +107,9 @@ class ExperimentConfig:
         """Operation slots / max instruction positions: legacy 3; mixed-length, compact and identity/variable 5;
         slot-count experiments: positional CAPACITY 6 (actual inputs have S tokens)."""
         from .mixed import N_SLOTS
+        if self.is_auxtask:
+            from .auxtask import CAPACITY as AUX_CAPACITY
+            return AUX_CAPACITY
         if self.is_longk:
             from .longk import CAPACITY
             return CAPACITY
@@ -113,6 +121,9 @@ class ExperimentConfig:
     @property
     def train_strings(self) -> List[str]:
         """Training words as LABELS (the empty word is "EMPTY")."""
+        if self.is_auxtask:
+            from .auxtask import training_labels as aux_labels
+            return aux_labels(self.experiment)
         if self.is_longk:
             from .longk import training_labels as longk_labels
             return longk_labels(self.experiment)
@@ -144,7 +155,7 @@ class ExperimentConfig:
         from .rowsep import ALL_CONDITIONS as ROWSEP_CONDITIONS
         from .longk import CONDITIONS as LONGK_CONDITIONS
         if (self.experiment in IDSLOT_EXPERIMENTS or self.experiment in ROWSEP_CONDITIONS
-                or self.experiment in LONGK_CONDITIONS):   # <root>/<condition>/seed_<seed>/
+                or self.experiment in LONGK_CONDITIONS or self.is_auxtask):   # <root>/<condition>/seed_<seed>/
             return Path(self.output_root) / self.experiment / f"seed_{self.train.seed}"
         return Path(self.output_root) / {**COMPACT_DIRS, **IDVAR_DIRS}.get(self.experiment, self.experiment)
 
@@ -156,7 +167,7 @@ class ExperimentConfig:
         from .mixed import is_compact
         from .idslot import is_idslot
         shared = (is_compact(self.experiment) or is_idvar(self.experiment) or is_idext(self.experiment)
-                  or is_idslot(self.experiment) or self.is_rowsep or self.is_longk)
+                  or is_idslot(self.experiment) or self.is_rowsep or self.is_longk or self.is_auxtask)
         return Path(self.output_root) / "manifests" if shared else self.experiment_dir / "manifests"
 
     @property
@@ -190,6 +201,8 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     known += list(ROWSEP_CONDITIONS)
     from .longk import CONDITIONS as LONGK_CONDITIONS
     known += list(LONGK_CONDITIONS)
+    from .auxtask import CONDITIONS as AUX_CONDITIONS
+    known += list(AUX_CONDITIONS)
     if experiment not in known:
         raise ValueError(f"experiment must be one of {known}")
     if mode not in ("full", "smoke"):
@@ -200,7 +213,7 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
         tc = replace(tc, **SMOKE_OVERRIDES)
         splits = dict(SMOKE_SPLITS)
         if experiment in {**MIXED_EXPERIMENTS, **COMPACT_EXPERIMENTS, **IDVAR_EXPERIMENTS, **IDEXT_EXPERIMENTS,
-                          **IDSLOT_EXPERIMENTS, **ROWSEP_CONDITIONS, **LONGK_CONDITIONS}:
+                          **IDSLOT_EXPERIMENTS, **ROWSEP_CONDITIONS, **LONGK_CONDITIONS, **AUX_CONDITIONS}:
             splits["n_test_grids"] = 2   # 2 grids x 364 words = 728 smoke test records
     tc = replace(tc, **train_overrides)
     root = output_root if mode == "full" else str(Path(output_root) / "smoke")

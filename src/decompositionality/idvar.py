@@ -47,7 +47,8 @@ def condition_of(experiment: str) -> str:
     from .idext import is_idext
     from .idslot import is_idslot
     from .longk import is_longk
-    if is_longk(experiment):
+    from .auxtask import is_auxtask
+    if is_longk(experiment) or is_auxtask(experiment):
         return "identity"
     from .rowsep import condition_format, is_rowsep
     if is_rowsep(experiment):

@@ -189,6 +189,9 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     from .idext import is_idext
     from .idslot import is_idslot
     from .idvar import condition_of, is_idvar
+    from .auxtask import is_auxtask, model_config as aux_model_config
+    if is_auxtask(cfg.experiment):
+        return aux_model_config(model_id, cfg.model_overrides.get(model_id))
     from .longk import is_longk, model_config as longk_model_config
     if is_longk(cfg.experiment):
         # ONE config (capacity 7, identity vocabulary, variable count of real op tokens) for all four conditions
@@ -267,6 +270,13 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
         d["initialization"] = ("historical S=5 identity init (seed) with position table grown 82->83 rows; added row "
                                "from a separate generator")
         d["checkpoint_selection"] = "mean answer-digit CE (EOS excluded) over the training k validation groups"
+    from . import auxtask as AX
+    if AX.is_auxtask(cfg.experiment):
+        d["data_version"] = AX.DATA_VERSION
+        d["S"], d["main_ks"], d["capacity"] = AX.S, list(AX.MAIN_KS), AX.CAPACITY
+        d["aux_ks"], d["aux_per_update"] = list(AX.aux_ks(cfg.experiment)), AX.CONDITIONS[cfg.experiment][1]
+        d["aux_ops"] = "D: d->(d+1) mod 10; E: d->9-d (value ops; never move cells)"
+        d["evaluated_checkpoint"] = "LAST (state.pt at the final update)"
     from . import longk as LK
     if LK.is_longk(cfg.experiment):
         d["data_version"] = LK.DATA_VERSION
@@ -428,7 +438,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    if cfg.is_longk:
+    if cfg.is_auxtask:
+        from .auxtask import AuxStream
+        stream = AuxStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
+    elif cfg.is_longk:
         from .longk import LongKStream
         stream = LongKStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
     elif cfg.is_rowsep:

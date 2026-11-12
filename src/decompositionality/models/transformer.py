@@ -29,6 +29,7 @@ class TransformerConfig:
     identity_token: bool = False   # vocabulary includes the visible, learnable <identity> operation
     op_format: str = "fixed"       # "fixed" (exactly n_slots op tokens) | "variable" (0..n_slots real tokens, no PAD)
     row_sep: bool = False          # AR only: <ROW> separators between grid rows in input AND output (41-token grids)
+    aux_vocab: bool = False        # vocabulary incl. the auxiliary-task tokens (D, E, <main>, <aux>; IDs up to 24)
     out_mode: str = "inplace"      # encoder only: "inplace" (bidirectional; answers read at the input cells) |
                                    # "causal" (36 output query positions after the input; the WHOLE sequence is
                                    # causal; all 36 answers predicted in parallel, nothing fed back)
@@ -57,6 +58,9 @@ class TransformerAR(GridModel):
         if cfg.row_sep:
             assert cfg.identity_token, "row-separator models extend the identity vocabulary"
         V = T.VOCAB_SIZE_ROW if cfg.row_sep else (T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.VOCAB_SIZE)
+        if cfg.aux_vocab:
+            assert not cfg.row_sep, "aux vocabulary and ROW separators are not combined"
+            V = T.VOCAB_SIZE_AUX
         self.tok_emb = nn.Embedding(V, d)
         if cfg.sequence_pe == "learned":          # legacy learned absolute 1D position table (max-size)
             self.pos_emb = nn.Embedding(L, d)
@@ -184,7 +188,8 @@ class TransformerEncoder(GridModel):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         d = cfg.d_model
-        self.tok_emb = nn.Embedding(T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.NONAR_VOCAB_SIZE, d)
+        self.tok_emb = nn.Embedding(T.VOCAB_SIZE_AUX if cfg.aux_vocab else
+                                    (T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.NONAR_VOCAB_SIZE), d)
         self.causal_out = cfg.out_mode == "causal"
         # 0 = operation slot, 1 = grid cell [, 2 = output query]
         self.type_emb = nn.Embedding(3 if self.causal_out else 2, d)

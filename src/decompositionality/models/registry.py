@@ -61,7 +61,7 @@ def config_dict(model: GridModel) -> dict:
         d.pop("sequence_pe")
         d.pop("pe_base", None)
     for key, legacy in (("identity_token", False), ("op_format", "fixed"), ("conditioner", "concat"), ("row_sep", False),
-                         ("out_mode", "inplace")):
+                         ("out_mode", "inplace"), ("aux_vocab", False)):
         if d.get(key) == legacy:
             d.pop(key)
     return d
