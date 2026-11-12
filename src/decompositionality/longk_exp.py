@@ -192,8 +192,10 @@ def load_eval(cfg, model_id) -> dict:
     ed = eval_dir(cfg, model_id)
     fs = sorted((ed / "chunks").glob("chunk_*.npz"))
     parts = [dict(np.load(f)) for f in fs]
-    out = {k: np.concatenate([p[k] for p in parts]) for k in parts[0] if k != "config_hash"} if parts else {}
-    return out
+    if not parts:
+        return {}
+    keys = [k for k in parts[0] if np.asarray(parts[0][k]).ndim > 0]   # skip scalar metadata (config_hash, plan)
+    return {k: np.concatenate([p[k] for p in parts]) for k in keys}
 
 
 def status_table(results_root, mode, seed=42, conditions=None, subdir: str = LK.SUBDIR):
