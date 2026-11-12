@@ -906,6 +906,27 @@ Both AR models run in each condition: 6 runs, 384,000 evaluation records in tota
   with completion markers; missing ones show as pending.
 * Send back `report/seed_42/AR_Row_Slots234_Review.ipynb`.
 
+## 21. Causal encoder in four identity settings (notebook 20; 8 runs)
+
+[`notebooks/20_causal_encoder_identity_settings.ipynb`](notebooks/20_causal_encoder_identity_settings.ipynb)
+
+**Model.** `causal_encoder` (6 untied blocks) and `looped_causal_encoder` (one shared block × 6).
+* Sequence: `[op slots] + [36 input cells] + [36 output queries]`, causal attention over the whole sequence.
+* All answers are read at the queries in one parallel pass, with no autoregressive feedback.
+* Implementation: `TransformerConfig(out_mode="causal")`. The default `"inplace"` is omitted from config hashes, so
+  every existing encoder / AR hash is unchanged.
+* The new model ids are accepted by configs but are not part of the default nine-model queue.
+
+**Settings.** Each is paired with an existing AR run: same stream, validation and test manifests.
+* S5 k∈{0,2,3,4,5}: notebook 10.
+* S5 k∈{0,2,3,4}: notebook 14.
+* S4 k∈{0,2,3,4}: notebook 16.
+* S6 k∈{0,2,3,4,5}: notebook 16.
+
+One common initialization per architecture across the four settings.
+
+**Results.** `<RESULTS_ROOT>/causal_encoder_identity_v1/`. Send back `report/seed_42/Causal_Encoder_Review.ipynb`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

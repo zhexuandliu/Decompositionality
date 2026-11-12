@@ -191,8 +191,9 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
     root = output_root if mode == "full" else str(Path(output_root) / "smoke")
     cfg = ExperimentConfig(experiment=experiment, mode=mode, output_root=root,
                            models=list(models or MODEL_IDS), train=tc, **splits)
+    from .names import EXTRA_MODEL_IDS
     for m in cfg.models:
-        if m not in MODEL_IDS:
+        if m not in MODEL_IDS and m not in EXTRA_MODEL_IDS:
             raise ValueError(f"unknown model {m}")
     return cfg
 

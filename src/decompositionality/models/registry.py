@@ -19,6 +19,8 @@ _SPECS: Dict[str, tuple] = {
     "looped_transformer_ar": (TransformerAR, lambda: TransformerConfig(tied=True)),
     "transformer_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=False)),
     "looped_transformer_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=True)),
+    "causal_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal")),
+    "looped_causal_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=True, out_mode="causal")),
     "vit": (ViT, lambda: TransformerConfig(tied=False)),
     "looped_vit": (ViT, lambda: TransformerConfig(tied=True)),
     "trm": (TRM, TRMConfig),
@@ -58,7 +60,8 @@ def config_dict(model: GridModel) -> dict:
     if d.get("sequence_pe") == "learned":      # legacy default: omit so legacy hashes are unchanged
         d.pop("sequence_pe")
         d.pop("pe_base", None)
-    for key, legacy in (("identity_token", False), ("op_format", "fixed"), ("conditioner", "concat"), ("row_sep", False)):
+    for key, legacy in (("identity_token", False), ("op_format", "fixed"), ("conditioner", "concat"), ("row_sep", False),
+                         ("out_mode", "inplace")):
         if d.get(key) == legacy:
             d.pop(key)
     return d

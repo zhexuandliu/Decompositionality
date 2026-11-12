@@ -29,10 +29,14 @@ class TransformerConfig:
     identity_token: bool = False   # vocabulary includes the visible, learnable <identity> operation
     op_format: str = "fixed"       # "fixed" (exactly n_slots op tokens) | "variable" (0..n_slots real tokens, no PAD)
     row_sep: bool = False          # AR only: <ROW> separators between grid rows in input AND output (41-token grids)
+    out_mode: str = "inplace"      # encoder only: "inplace" (bidirectional; answers read at the input cells) |
+                                   # "causal" (36 output query positions after the input; the WHOLE sequence is
+                                   # causal; all 36 answers predicted in parallel, nothing fed back)
 
     def __post_init__(self):
         assert self.sequence_pe in SEQUENCE_PE_CHOICES, self.sequence_pe
         assert self.op_format in ("fixed", "variable"), self.op_format
+        assert self.out_mode in ("inplace", "causal"), self.out_mode
 
 
 # ---------------------------------------------------------------------------
@@ -181,7 +185,9 @@ class TransformerEncoder(GridModel):
         self.cfg, self.model_id = cfg, model_id
         d = cfg.d_model
         self.tok_emb = nn.Embedding(T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.NONAR_VOCAB_SIZE, d)
-        self.type_emb = nn.Embedding(2, d)   # 0 = operation slot, 1 = grid cell
+        self.causal_out = cfg.out_mode == "causal"
+        # 0 = operation slot, 1 = grid cell [, 2 = output query]
+        self.type_emb = nn.Embedding(3 if self.causal_out else 2, d)
         n = cfg.n_slots
         if cfg.sequence_pe == "learned":
             self.slot_emb = nn.Embedding(n, d)   # legacy learned operation-slot positions
@@ -190,6 +196,8 @@ class TransformerEncoder(GridModel):
         self.stack = BlockStack(cfg.depth, cfg.tied, lambda: PreNormBlock(d, cfg.n_heads, cfg.d_ff, cfg.dropout))
         self.ln_f = nn.LayerNorm(d)
         self.head = nn.Linear(d, 10)  # shared per-cell classifier
+        if self.causal_out:
+            self.query_emb = nn.Embedding(1, d)   # one learned query vector (+ its output cell's row/col embeddings)
         gpt_init(self)
         if cfg.sequence_pe != "learned":
             self.seq_pe = SequencePE(cfg.sequence_pe, n + 36, d, d // cfg.n_heads, cfg.pe_base)
@@ -218,6 +226,19 @@ class TransformerEncoder(GridModel):
             if add is not None:
                 h = h + add.to(h.dtype)
             cos, sin = self.seq_pe.rotary(seq_pos)
+        if self.causal_out:
+            # 36 output queries after [ops, input cells]; causal attention over the whole sequence; read the answers
+            # at the queries (parallel, no feedback). Queries carry only their output cell's (row, col).
+            B = tokens.shape[0]
+            q = (self.query_emb.weight[0] + self.row_emb(self.rows) + self.col_emb(self.cols)
+                 + self.type_emb.weight[2])                                 # [36, d]
+            h = torch.cat([h, q[None].expand(B, -1, -1).to(h.dtype)], dim=1)  # [B, n+72, d]
+            L = h.shape[1]
+            causal = torch.tril(torch.ones(L, L, dtype=torch.bool, device=h.device))
+            keys = torch.cat([key_padding_mask(tokens, T.PAD_ID)[:, 0, 0],
+                              torch.ones(B, 36, dtype=torch.bool, device=h.device)], dim=1)
+            h = self.stack(h, causal[None, None] & keys[:, None, None, :], cos, sin)
+            return self.head(self.ln_f(h[:, n + 36:]))                     # [B,36,10] at the queries
         h = self.stack(h, key_padding_mask(tokens, T.PAD_ID), cos, sin)  # no causal mask
         return self.head(self.ln_f(h[:, n:]))                          # [B,36,10]
 

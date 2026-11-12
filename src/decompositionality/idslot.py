@@ -198,7 +198,8 @@ def grown_initial_state(model_id: str, seed: int):
         if s.shape == v.shape:
             out[k] = s.clone()
         else:
-            assert k == "pos_emb.weight" and v.shape[0] > s.shape[0] and v.shape[1:] == s.shape[1:], (k, s.shape, v.shape)
+            # only per-position tables grow (AR: pos_emb; encoders: slot_emb); everything else is copied
+            assert k in ("pos_emb.weight", "slot_emb.weight") and v.shape[0] > s.shape[0] and v.shape[1:] == s.shape[1:], (k, s.shape, v.shape)
             extra = torch.randn(v.shape[0] - s.shape[0], *v.shape[1:], generator=gen) * 0.02  # gpt_init std
             out[k] = torch.cat([s.clone(), extra], dim=0)
     return out

@@ -20,6 +20,8 @@ MODEL_STYLE = {
     "trm": dict(color=_FAMILY["trm"], hatch=None, ls="-"),
     "rescnn_film": dict(color=_FAMILY["res"], hatch=None, ls="-"),
     "unet_film": dict(color=_FAMILY["unet"], hatch=None, ls="-"),
+    "causal_encoder": dict(color="#8e6bd6", hatch=None, ls="-"),
+    "looped_causal_encoder": dict(color="#8e6bd6", hatch="///", ls="--"),
 }
 # Fixed categorical colors for digit values 0..9 (digits are also printed in every cell).
 DIGIT_COLORS = ["#f2f2f2", "#2a78d6", "#e34948", "#1baf7a", "#eda100", "#8c8c8c",

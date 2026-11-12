@@ -12,7 +12,13 @@ MODEL_IDS = [
     "unet_film",
 ]
 
+# Extra models accepted by experiment configs but NOT part of the default nine-model queue (so legacy notebooks'
+# default queues are unchanged).
+EXTRA_MODEL_IDS = ["causal_encoder", "looped_causal_encoder"]
+
 DISPLAY_NAMES = {
+    "causal_encoder": "Causal encoder (parallel output queries)",
+    "looped_causal_encoder": "Looped causal encoder (tied)",
     "transformer_ar": "Transformer AR",
     "looped_transformer_ar": "Looped Transformer AR (tied)",
     "transformer_encoder": "Transformer encoder",
@@ -29,4 +35,5 @@ TIED_PAIRS = {
     "looped_transformer_ar": "transformer_ar",
     "looped_transformer_encoder": "transformer_encoder",
     "looped_vit": "vit",
+    "looped_causal_encoder": "causal_encoder",
 }
