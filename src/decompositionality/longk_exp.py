@@ -14,6 +14,12 @@ import numpy as np
 from . import longk as LK
 
 
+# Evaluation data (held-out grid manifests, validation set, test records) is FIXED across training seeds so that
+# multi-seed runs are evaluated on identical records; the training seed controls initialization and the training
+# stream only. For seed 42 this is exactly the original behaviour.
+EVAL_SEED = 42
+
+
 def family_root(results_root: str, mode: str, subdir: str = LK.SUBDIR) -> Path:
     r = Path(results_root) / subdir
     return r if mode == "full" else r / "smoke"
@@ -32,8 +38,8 @@ def prepare(cfg, repo_dir=None, log=print):
     from .idvar import subset_by_grids
     from .pipeline import Context
     from .utils import atomic_write_json
-    m = load_or_build_manifests(cfg.manifest_dir, cfg.train.seed)
-    val = LK.make_val_set(m.val_grids[: cfg.n_val_grids], cfg.train.seed, cfg.experiment)
+    m = load_or_build_manifests(cfg.manifest_dir, EVAL_SEED)
+    val = LK.make_val_set(m.val_grids[: cfg.n_val_grids], EVAL_SEED, cfg.experiment)
     assert set(np.unique(val["k"])) == set(LK.train_ks(cfg.experiment)) and not (val["k"] == 1).any()
     subset = subset_by_grids(val, cfg.val_subset_grids)
     cfg.experiment_dir.mkdir(parents=True, exist_ok=True)
@@ -92,7 +98,7 @@ def evaluate_last(model_id, ctx, n_grids=1000, k7_grids=300, chunk_grids=50, log
     for ci, g0 in enumerate(starts):
         f = cd / f"chunk_{ci:03d}.npz"
         g1 = min(n_grids, g0 + chunk_grids)
-        es = LK.make_test_chunk(grids, tc.seed, e, g0, g1, n_grids, k7_grids)
+        es = LK.make_test_chunk(grids, EVAL_SEED, e, g0, g1, n_grids, k7_grids)
         if f.exists():
             with np.load(f) as z:
                 if str(z["config_hash"]) == rc["config_hash"] and len(z["exact"]) == len(es["x"]):
@@ -149,7 +155,7 @@ def evaluate_last_sampled(model_id, ctx, plan: dict, chunk_records: int = 25000,
     model = build_model(model_id, rc["model_config"]).to(device)
     model.load_state_dict(st["model"])
     model.eval()
-    es = LK.make_test_sampled(ctx.manifests.test_grids[: cfg.n_test_grids], tc.seed, e, **plan)
+    es = LK.make_test_sampled(ctx.manifests.test_grids[: cfg.n_test_grids], EVAL_SEED, e, **plan)
     n = len(es["x"])
     cd = ed / "chunks"
     if cd.exists():
@@ -373,5 +379,113 @@ def report(results_root, mode, seed=42, show=True, log=print, conditions=None, s
         t.to_csv(out / "tables" / f"{k}.csv", index=False)
     rp = write_review(R.items, out, "AR vs causal encoder (last checkpoint)",
                       "# AR vs causal encoder — review snapshot\n\nBaked outputs; nothing to run.", review_name)
+    log(f"REVIEW FILE: {rp}")
+    return rp
+
+
+# ---------------------------------------------------------------------------
+# Multi-seed aggregation (notebook 27)
+# ---------------------------------------------------------------------------
+
+def per_k_accuracy(results_root, mode, seeds, conditions, subdir, models=None):
+    """One row per (condition, model, seed, k): exact accuracy at the LAST checkpoint (k=1 = singletons)."""
+    import pandas as pd
+    rows = []
+    for e in conditions:
+        S, ks = LK.CONDITIONS[e]
+        for m in (models or LK.MODELS):
+            for sd in seeds:
+                cfg = make_cfg(e, results_root, mode, [m], sd, subdir)
+                af = eval_dir(cfg, m) / "ARTIFACT.json"
+                if not af.exists() or not json.loads(af.read_text()).get("complete"):
+                    rows.append({"condition": e, "model": m, "seed": sd, "k": np.nan, "status": "not yet available"})
+                    continue
+                d = load_eval(cfg, m)
+                k = d["k"].astype(int)
+                ex = d["exact"].astype(bool)
+                for kk in sorted(set(k.tolist())):
+                    q = k == kk
+                    rows.append({"condition": e, "max_train_k": max(ks), "model": m, "seed": sd, "k": kk,
+                                 "role": "trained" if kk in ks else ("singleton" if kk == 1 else f"+{kk - max(ks)} step"),
+                                 "exact_acc": float(ex[q].mean()), "records": int(q.sum()), "status": "available"})
+    return pd.DataFrame(rows)
+
+
+def multiseed_report(results_root, mode="full", seeds=(42, 43, 44), conditions=None, subdir="S7_support_sweep_20k_v1",
+                     show=True, log=print, review_name="S7_Sweep_MultiSeed_Review.ipynb"):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from .mirror_report import Report, write_review
+    conds = conditions or LK.S7_SWEEP
+    seeds = list(seeds)
+    root = family_root(results_root, mode, subdir)
+    out = root / "report" / "multiseed"
+    R = Report(show)
+    df = per_k_accuracy(results_root, mode, seeds, conds, subdir)
+    avail = df[df.status == "available"]
+    st = df.groupby(["condition", "model", "seed"]).status.first().unstack("seed")
+    R.md(f"# S=7 support sweep — {len(seeds)} seeds {seeds} (LAST checkpoint, 20,000 updates)\n"
+         "Training seed varies the initialization and the training stream; the held-out grids, validation set and "
+         "sampled test records are identical for every seed.")
+    R.table("Availability by seed", st.reset_index(), 20)
+    if not len(avail):
+        return None
+    agg = avail.groupby(["condition", "max_train_k", "model", "k", "role"]).exact_acc.agg(
+        mean="mean", std="std", min="min", max="max", n_seeds="count").reset_index()
+    per_seed = avail.pivot_table(index=["condition", "model", "k"], columns="seed", values="exact_acc").reset_index()
+    per_seed.columns = [f"seed {c}" if isinstance(c, (int, np.integer)) else c for c in per_seed.columns]
+    agg = agg.merge(per_seed, on=["condition", "model", "k"])
+    R.table("Exact accuracy by condition, model and k: mean ± std over seeds, with each seed", agg.round(4), 200)
+    colors = {"transformer_ar": "#2a78d6", "causal_encoder": "#8e6bd6"}
+    # main figure: one panel per training support
+    fig, axes = plt.subplots(2, 3, figsize=(16, 8.5), squeeze=False)
+    for ax, e in zip(axes.flat, conds):
+        S, ks = LK.CONDITIONS[e]
+        for kk in ks:
+            ax.axvspan(kk - 0.5, kk + 0.5, color="#eeeeee", zorder=0)
+        ax.axvline(max(ks) + 0.5, color="#999999", ls="--", lw=1)
+        for m in LK.MODELS:
+            q = agg[(agg.condition == e) & (agg.model == m)].sort_values("k")
+            if not len(q):
+                continue
+            for sd in seeds:
+                qs = avail[(avail.condition == e) & (avail.model == m) & (avail.seed == sd)].sort_values("k")
+                ax.plot(qs.k, qs.exact_acc, color=colors[m], lw=0.6, alpha=0.35)
+            ax.fill_between(q.k, q["min"], q["max"], color=colors[m], alpha=0.15)
+            ax.plot(q.k, q["mean"], color=colors[m], lw=2, label=f"{m} (mean of {int(q.n_seeds.max())} seeds)")
+            held = ~q.k.isin(ks)
+            ax.scatter(q.k[~held], q["mean"][~held], color=colors[m], s=30, zorder=3)
+            ax.scatter(q.k[held], q["mean"][held], facecolors="white", edgecolors=colors[m], s=55, lw=1.8, zorder=3)
+        ax.set(title=f"{e}: trained k = {list(ks)}", xlabel="test k (k=1: singletons)", ylabel="exact accuracy",
+               xticks=range(0, S + 1), ylim=(-0.03, 1.05), xlim=(-0.5, S + 0.5))
+        ax.legend(fontsize=7, loc="lower left")
+    fig.suptitle("Grey = trained k; open markers = held out; dashed line = longest trained k; band = min–max over seeds; "
+                 "thin lines = individual seeds", fontsize=9)
+    fig.tight_layout()
+    R.fig(fig, "Accuracy vs test k for every training support (mean, min–max band, individual seeds)",
+          out / "figures" / "acc_vs_k_by_support.png")
+    # summary figure: singleton / +1 / +2 vs longest trained k
+    fig, axes = plt.subplots(1, 3, figsize=(16, 4.2), squeeze=False)
+    for ax, role in zip(axes[0], ("singleton", "+1 step", "+2 step")):
+        for m in LK.MODELS:
+            q = agg[(agg.model == m) & (agg.role == role)].sort_values("max_train_k")
+            if not len(q):
+                continue
+            ax.plot(q.max_train_k, q["mean"], color=colors[m], lw=2, marker="o", label=m)
+            for sd in seeds:
+                qs = avail[(avail.model == m) & (avail.role == role) & (avail.seed == sd)]
+                ax.scatter(qs.max_train_k + (0.06 if m == "causal_encoder" else -0.06), qs.exact_acc, color=colors[m],
+                           s=14, alpha=0.6)
+        ax.set(title=role, xlabel="longest trained k (S = 7)", ylabel="exact accuracy", ylim=(-0.03, 1.05),
+               xticks=range(2, 8))
+        ax.legend(fontsize=7)
+    fig.suptitle("Held-out accuracy vs longest trained k: line = mean over seeds, dots = individual seeds", fontsize=9)
+    fig.tight_layout()
+    R.fig(fig, "Singleton / +1 step / +2 step accuracy vs longest trained k", out / "figures" / "summary_vs_max_k.png")
+    (out / "tables").mkdir(parents=True, exist_ok=True)
+    df.to_csv(out / "tables" / "per_seed_per_k.csv", index=False)
+    agg.to_csv(out / "tables" / "aggregate.csv", index=False)
+    rp = write_review(R.items, out, "S=7 sweep, multiple seeds",
+                      "# S=7 support sweep, multiple seeds — review snapshot\n\nBaked outputs; nothing to run.", review_name)
     log(f"REVIEW FILE: {rp}")
     return rp
