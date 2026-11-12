@@ -204,11 +204,11 @@ def load_eval(cfg, model_id) -> dict:
     return {k: np.concatenate([p[k] for p in parts]) for k in keys}
 
 
-def status_table(results_root, mode, seed=42, conditions=None, subdir: str = LK.SUBDIR):
+def status_table(results_root, mode, seed=42, conditions=None, subdir: str = LK.SUBDIR, models=None):
     import pandas as pd
     rows = []
     for e in (conditions or LK.NB21_CONDITIONS):
-        for m in LK.MODELS:
+        for m in (models or LK.MODELS):
             cfg = make_cfg(e, results_root, mode, [m], seed, subdir)
             d = cfg.experiment_dir
             a = eval_dir(cfg, m) / "ARTIFACT.json"
@@ -244,7 +244,7 @@ def run_queue(results_root, mode, seed, conditions, models, repo_dir=None, n_gri
                 log(f"[{e}/{m}] FAILED -> rerun to resume")
             finally:
                 free_memory()
-    return status_table(results_root, mode, seed, conditions, subdir)
+    return status_table(results_root, mode, seed, conditions, subdir, models)
 
 
 def report(results_root, mode, seed=42, show=True, log=print, conditions=None, subdir: str = LK.SUBDIR,
