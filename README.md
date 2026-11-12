@@ -950,6 +950,18 @@ longer word is tested. k=7 uses `K7_GRIDS` grids (default 300).
 **Results.** `<RESULTS_ROOT>/longk_ar_vs_causal_encoder_v1/`. Send back
 `report/seed_42/LongK_AR_vs_CausalEnc_Review.ipynb`.
 
+## 23. S=7 rerun at 10,000 updates (notebook 22; 4 runs)
+
+[`notebooks/22_ar_vs_causal_encoder_S7_10k.ipynb`](notebooks/22_ar_vs_causal_encoder_S7_10k.ipynb)
+
+**Runs.** S7_k02345 and S7_k023456 × {Transformer AR, causal encoder}, trained for 10,000 updates instead of 5000.
+
+**Unchanged from notebook 21.** Initialization, logical stream and test sets. Evaluation is again the last
+checkpoint.
+
+**Results.** A separate folder, `longk_ar_vs_causal_encoder_S7_10k_v1/`, so notebook 21's results are kept. The
+report includes a 5k vs 10k table.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

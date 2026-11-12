@@ -14,14 +14,15 @@ import numpy as np
 from . import longk as LK
 
 
-def family_root(results_root: str, mode: str) -> Path:
-    r = Path(results_root) / LK.SUBDIR
+def family_root(results_root: str, mode: str, subdir: str = LK.SUBDIR) -> Path:
+    r = Path(results_root) / subdir
     return r if mode == "full" else r / "smoke"
 
 
-def make_cfg(e, results_root, mode, models, seed=42, **kw):
+def make_cfg(e, results_root, mode, models, seed=42, subdir: str = LK.SUBDIR, **kw):
+    """``kw`` are TrainConfig overrides (e.g. optimizer_steps=10000); a different budget must use its own subdir."""
     from .config import make_experiment_config
-    cfg = make_experiment_config(e, mode, str(Path(results_root) / LK.SUBDIR), models, seed=seed, **kw)
+    cfg = make_experiment_config(e, mode, str(Path(results_root) / subdir), models, seed=seed, **kw)
     cfg.resume = True
     return cfg
 
@@ -130,12 +131,12 @@ def load_eval(cfg, model_id) -> dict:
     return out
 
 
-def status_table(results_root, mode, seed=42):
+def status_table(results_root, mode, seed=42, conditions=None, subdir: str = LK.SUBDIR):
     import pandas as pd
     rows = []
-    for e in LK.CONDITIONS:
+    for e in (conditions or list(LK.CONDITIONS)):
         for m in LK.MODELS:
-            cfg = make_cfg(e, results_root, mode, [m], seed)
+            cfg = make_cfg(e, results_root, mode, [m], seed, subdir)
             d = cfg.experiment_dir
             a = eval_dir(cfg, m) / "ARTIFACT.json"
             a = json.loads(a.read_text()) if a.exists() else {}
@@ -148,11 +149,12 @@ def status_table(results_root, mode, seed=42):
 
 
 def run_queue(results_root, mode, seed, conditions, models, repo_dir=None, n_grids=1000, k7_grids=300,
-              chunk_grids=50, device="auto", dtype="auto", log=print):
+              chunk_grids=50, device="auto", dtype="auto", log=print, subdir: str = LK.SUBDIR, steps=None):
     from .training import train_model
     from .utils import free_memory
     for e in conditions:
-        cfg = make_cfg(e, results_root, mode, models, seed, device=device, dtype=dtype)
+        over = {"optimizer_steps": steps} if steps else {}
+        cfg = make_cfg(e, results_root, mode, models, seed, subdir, device=device, dtype=dtype, **over)
         ctx = prepare(cfg, repo_dir, log)
         ng = min(n_grids, cfg.n_test_grids)
         for m in models:
@@ -165,10 +167,11 @@ def run_queue(results_root, mode, seed, conditions, models, repo_dir=None, n_gri
                 log(f"[{e}/{m}] FAILED -> rerun to resume")
             finally:
                 free_memory()
-    return status_table(results_root, mode, seed)
+    return status_table(results_root, mode, seed, conditions, subdir)
 
 
-def report(results_root, mode, seed=42, show=True, log=print) -> Path:
+def report(results_root, mode, seed=42, show=True, log=print, conditions=None, subdir: str = LK.SUBDIR,
+           compare_subdir=None, title_note: str = "", review_name: str = "LongK_AR_vs_CausalEnc_Review.ipynb") -> Path:
     import pandas as pd
     import matplotlib.pyplot as plt
     from . import mirror_diag as M
@@ -176,19 +179,20 @@ def report(results_root, mode, seed=42, show=True, log=print) -> Path:
     from .words import from_label
     G = M.group()
     R = Report(show)
-    root = family_root(results_root, mode)
+    conds = conditions or list(LK.CONDITIONS)
+    root = family_root(results_root, mode, subdir)
     out = root / "report" / f"seed_{seed}"
-    st = status_table(results_root, mode, seed)
+    st = status_table(results_root, mode, seed, conds, subdir)
     R.md(f"# Transformer AR vs causal encoder — LAST checkpoint, singletons and longer instructions (seed {seed})\n"
-         f"{int(st.complete.sum())}/8 runs complete. Every number below is for the model after the final update "
-         "(not the validation-selected checkpoint).")
+         f"{int(st.complete.sum())}/{len(st)} runs complete. Every number below is for the model after the final "
+         f"update (not the validation-selected checkpoint). {title_note}")
     R.table("Run status", st, 10)
     rk, rs, rslot, rgeo, rpair = [], [], [], [], []
     data = {}
-    for e in LK.CONDITIONS:
+    for e in conds:
         S, ks = LK.CONDITIONS[e]
         for m in LK.MODELS:
-            cfg = make_cfg(e, results_root, mode, [m], seed)
+            cfg = make_cfg(e, results_root, mode, [m], seed, subdir)
             a = eval_dir(cfg, m) / "ARTIFACT.json"
             if not a.exists() or not json.loads(a.read_text()).get("complete"):
                 rs.append({"condition": e, "model": m, "status": "not yet available"})
@@ -252,8 +256,8 @@ def report(results_root, mode, seed=42, show=True, log=print) -> Path:
     R.table("AR vs causal encoder on identical test records", T["paired_ar_vs_causal"], 60)
     bk = T["by_k"]
     if len(bk):
-        fig, axes = plt.subplots(1, 4, figsize=(18, 3.8), squeeze=False)
-        for ax, e in zip(axes[0], LK.CONDITIONS):
+        fig, axes = plt.subplots(1, len(conds), figsize=(4.5 * len(conds), 3.8), squeeze=False)
+        for ax, e in zip(axes[0], conds):
             for m, col in zip(LK.MODELS, ("#2a78d6", "#8e6bd6")):
                 q = bk[(bk.condition == e) & (bk.model == m)].sort_values("k")
                 if not len(q):
@@ -267,10 +271,35 @@ def report(results_root, mode, seed=42, show=True, log=print) -> Path:
         fig.suptitle("Red circles = held out (k=1 and k > max trained k)")
         fig.tight_layout()
         R.fig(fig, "Exact accuracy by k", out / "figures" / "by_k.png")
+    if compare_subdir:
+        # same conditions, same init and logical stream, shorter budget (read-only)
+        rows = []
+        for e in conds:
+            for m in LK.MODELS:
+                for label, sd in (("previous budget", compare_subdir), ("this run", subdir)):
+                    cfg = make_cfg(e, results_root, mode, [m], seed, sd)
+                    af = eval_dir(cfg, m) / "ARTIFACT.json"
+                    if not af.exists() or not json.loads(af.read_text()).get("complete"):
+                        rows.append({"condition": e, "model": m, "run": label, "status": "not available"})
+                        continue
+                    a = json.loads(af.read_text())
+                    d = load_eval(cfg, m)
+                    k_, ex = d["k"].astype(int), d["exact"].astype(bool)
+                    s1 = d["kind"] == "single"
+                    r = {"condition": e, "model": m, "run": label, "status": "available", "final step": a.get("step"),
+                         "best step (ref)": a.get("best_step"),
+                         **{f"single {op}": int(ex[s1 & (d["string"] == op)].sum()) for op in "ABC"},
+                         "singletons": f"{int(ex[s1].sum())}/{int(s1.sum())}",
+                         "trained-k exact": round(float(ex[np.isin(k_, LK.train_ks(e))].mean()), 4)}
+                    for kk in LK.heldout_long_ks(e):
+                        r[f"k={kk} exact"] = round(float(ex[k_ == kk].mean()), 4)
+                    rows.append(r)
+        T["budget_comparison"] = pd.DataFrame(rows)
+        R.table("Same runs at the previous budget vs this budget (last checkpoint each)", T["budget_comparison"], 40)
     (out / "tables").mkdir(parents=True, exist_ok=True)
     for k, t in T.items():
         t.to_csv(out / "tables" / f"{k}.csv", index=False)
     rp = write_review(R.items, out, "AR vs causal encoder (last checkpoint)",
-                      "# AR vs causal encoder — review snapshot\n\nBaked outputs; nothing to run.", "LongK_AR_vs_CausalEnc_Review.ipynb")
+                      "# AR vs causal encoder — review snapshot\n\nBaked outputs; nothing to run.", review_name)
     log(f"REVIEW FILE: {rp}")
     return rp
