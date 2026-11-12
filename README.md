@@ -927,6 +927,29 @@ One common initialization per architecture across the four settings.
 
 **Results.** `<RESULTS_ROOT>/causal_encoder_identity_v1/`. Send back `report/seed_42/Causal_Encoder_Review.ipynb`.
 
+## 22. AR vs causal encoder, last checkpoint, longer instructions (notebook 21; 8 runs)
+
+[`notebooks/21_ar_vs_causal_encoder_last_ckpt_longk.ipynb`](notebooks/21_ar_vs_causal_encoder_last_ckpt_longk.ipynb)
+
+**Runs.** `transformer_ar` and `causal_encoder` × four conditions:
+
+| condition | train k | held-out tests |
+|---|---|---|
+| S5_k0234 | 0,2,3,4 | k=1, k=5 |
+| S6_k02345 | 0,2,3,4,5 | k=1, k=6 |
+| S7_k02345 | 0,2,3,4,5 | k=1, k=6, k=7 |
+| S7_k023456 | 0,2,3,4,5,6 | k=1, k=7 |
+
+All runs use the identity-filler format.
+
+**Shared setup.** Positional capacity 7, one initialization per architecture, and the per-k indexed logical stream.
+
+**Evaluation.** The LAST checkpoint (`state.pt` at update 5000). Singletons are tested at every slot; every held-out
+longer word is tested. k=7 uses `K7_GRIDS` grids (default 300).
+
+**Results.** `<RESULTS_ROOT>/longk_ar_vs_causal_encoder_v1/`. Send back
+`report/seed_42/LongK_AR_vs_CausalEnc_Review.ipynb`.
+
 ## 12. Known limitations
 
 * Only one training seed is used, so there is no cross-seed robustness claim.

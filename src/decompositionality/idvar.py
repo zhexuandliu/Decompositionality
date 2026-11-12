@@ -46,6 +46,9 @@ def is_idvar(experiment: str) -> bool:
 def condition_of(experiment: str) -> str:
     from .idext import is_idext
     from .idslot import is_idslot
+    from .longk import is_longk
+    if is_longk(experiment):
+        return "identity"
     from .rowsep import condition_format, is_rowsep
     if is_rowsep(experiment):
         return condition_format(experiment)

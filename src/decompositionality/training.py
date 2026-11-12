@@ -189,6 +189,10 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     from .idext import is_idext
     from .idslot import is_idslot
     from .idvar import condition_of, is_idvar
+    from .longk import is_longk, model_config as longk_model_config
+    if is_longk(cfg.experiment):
+        # ONE config (capacity 7, identity vocabulary, variable count of real op tokens) for all four conditions
+        return longk_model_config(model_id, cfg.model_overrides.get(model_id))
     from .rowsep import is_rowsep, model_config as rowsep_model_config
     if is_rowsep(cfg.experiment):
         # ONE config for all 13 row-separator conditions: <ROW> vocabulary, 93-position table, learned positions
@@ -263,6 +267,13 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
         d["initialization"] = ("historical S=5 identity init (seed) with position table grown 82->83 rows; added row "
                                "from a separate generator")
         d["checkpoint_selection"] = "mean answer-digit CE (EOS excluded) over the training k validation groups"
+    from . import longk as LK
+    if LK.is_longk(cfg.experiment):
+        d["data_version"] = LK.DATA_VERSION
+        d["S"], d["train_ks"] = LK.n_slots(cfg.experiment), list(LK.train_ks(cfg.experiment))
+        d["capacity"] = LK.CAPACITY
+        d["stream"] = "idext.record(seed,k,j); idext allocation/order; idslot placement stream"
+        d["evaluated_checkpoint"] = "LAST (state.pt at the final update); best.pt kept for reference"
     from . import rowsep as RS
     if RS.is_rowsep(cfg.experiment):
         e = cfg.experiment
@@ -417,7 +428,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    if cfg.is_rowsep:
+    if cfg.is_longk:
+        from .longk import LongKStream
+        stream = LongKStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
+    elif cfg.is_rowsep:
         from .rowsep import RowStream
         stream = RowStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
     elif cfg.is_idslot:
