@@ -1032,18 +1032,10 @@ notebook 23's sampled set.
 
 **Results.** `<RESULTS_ROOT>/aux_task_transfer_v1/`.
 
-## 28. Extra seeds for the S=7 sweep (notebooks 27a–27d; 24 runs, parallel)
+## 28. Extra seeds for the S=7 sweep (notebooks 27a + 27b; 24 runs, parallel)
 
-Seeds 43 and 44 for the notebook-23 sweep:
-
-| notebook | seed | conditions |
-|---|---|---|
-| 27a | 43 | k02, k023, k0234 |
-| 27b | 43 | k02345, k023456, k0234567 |
-| 27c | 44 | k02, k023, k0234 |
-| 27d | 44 | k02345, k023456, k0234567 |
-
-Each condition runs both models; seed 42 reuses the notebook-23 runs.
+27a runs seed 43 and 27b runs seed 44; each covers all six supports × both models (12 runs). Seed 42 reuses the
+notebook-23 runs.
 
 **Seeds.** The training seed controls initialization and the training stream. Held-out grids, validation and the
 sampled test records use the fixed evaluation seed 42 (`longk_exp.EVAL_SEED`), which leaves the seed-42 runs

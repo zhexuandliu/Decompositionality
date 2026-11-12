@@ -1,5 +1,5 @@
-"""Generate notebooks/27{a,b,c,d}_S7_sweep_seed{43,44}_*.ipynb: extra seeds for the notebook-23 S=7 sweep.
-Each notebook = one seed x 3 conditions x 2 models (6 runs); all four can run at the same time."""
+"""Generate notebooks/27a_/27b_S7_sweep_seed{43,44}_all.ipynb: extra seeds for the notebook-23 S=7 sweep.
+Each notebook = one seed x 6 conditions x 2 models (12 runs); the two can run at the same time."""
 from __future__ import annotations
 
 import sys
@@ -11,10 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebooks import BOOTSTRAP  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-HALF = {"first": ["S7_k02", "S7_k023", "S7_k0234"], "second": ["S7_k02345", "S7_k023456", "S7_k0234567"]}
-PARTS = {"a": (43, "first"), "b": (43, "second"), "c": (44, "first"), "d": (44, "second")}
+ALL = ["S7_k02", "S7_k023", "S7_k0234", "S7_k02345", "S7_k023456", "S7_k0234567"]
+PARTS = {"a": 43, "b": 44}
 
-INTRO = """# S=7 support sweep — extra seed __SEED__, part __PART__ (__CONDS_TXT__)
+INTRO = """# S=7 support sweep — extra seed __SEED__ (all six training supports × both models = 12 runs)
 
 The notebook-23 setup again, with training seed __SEED__.
 * Identity fillers, Transformer AR and causal encoder.
@@ -25,18 +25,11 @@ The notebook-23 setup again, with training seed __SEED__.
 grids, the validation set and the sampled test records are the same as for seed 42 (fixed evaluation seed), so the
 three seeds are evaluated on identical records.
 
-**Parallel notebooks.**
+**Parallel notebooks.** 27a runs seed 43 and 27b runs seed 44; each covers all six supports
+(k02 … k0234567) × {Transformer AR, causal encoder}. Run both at the same time, about 3 hours each. Seed 42 is the
+existing notebook-23 runs, which are reused and not retrained.
 
-| notebook | seed | conditions |
-|---|---|---|
-| 27a | 43 | k02, k023, k0234 |
-| 27b | 43 | k02345, k023456, k0234567 |
-| 27c | 44 | k02, k023, k0234 |
-| 27d | 44 | k02345, k023456, k0234567 |
-
-All four can run at the same time. Seed 42 is the existing notebook-23 runs, which are reused and not retrained.
-
-**Report.** The last cell, rerun in any notebook once everything is finished, makes the multi-seed report
+**Report.** The last cell, rerun in either notebook once both are finished, makes the multi-seed report
 `S7_Sweep_MultiSeed_Review.ipynb`:
 * accuracy vs test k per training support (mean over seeds, min–max band, individual seeds);
 * singleton / +1 / +2 step accuracy vs longest trained k;
@@ -83,9 +76,9 @@ if IN_COLAB and rp:
 
 
 def build(part):
-    seed, half = PARTS[part]
-    conds = HALF[half]
-    name = f"27{part}_S7_sweep_seed{seed}_{'_'.join(c.replace('S7_', '') for c in conds)}.ipynb"
+    seed = PARTS[part]
+    conds = ALL
+    name = f"27{part}_S7_sweep_seed{seed}_all.ipynb"
     sub = lambda t: (t.replace("__SEED__", str(seed)).replace("__CONDS__", repr(conds)).replace("__PART__", part)  # noqa: E731
                      .replace("__CONDS_TXT__", ", ".join(conds)))
     p = ROOT / "notebooks" / name
