@@ -34,6 +34,9 @@ class TransformerConfig:
                                    # embedding instead, every other token keeps only segment + row/col (ablation)
     digit_head: bool = False       # AR only. True = 10-way digit output head, loss on the 36 answer digits only
                                    # (no EOS target), 36 decoding steps (ablation)
+    target_coords: bool = False    # AR only. True = in the output part, every position carries the (row, col) of the
+                                   # cell it PREDICTS instead of its own token's: <OUTPUT> -> cell (0,0), answer token
+                                   # of cell j-1 -> cell j, answer token of cell 35 (predicts EOS) -> no coordinate
     head_eos: bool = False         # AR only, with digit_head: 11-way head (digits 0-9 + EOS); loss on 36 digits + EOS
                                    # as in the original AR, 37 decoding steps (ablation)
     out_mode: str = "inplace"      # encoder only: "inplace" (bidirectional; answers read at the input cells) |
@@ -104,10 +107,25 @@ class TransformerAR(GridModel):
         if cfg.sequence_pe != "learned":          # nontrainable; built after init so it consumes no RNG
             self.seq_pe = SequencePE(cfg.sequence_pe, L, d, d // cfg.n_heads, cfg.pe_base)
         meta = self.layout.metadata()
+        if cfg.target_coords:
+            assert not cfg.row_sep
+            meta = self._target_coord_meta(self.layout)
         for k, v in meta.items():
             self.register_buffer(f"meta_{k}", v, persistent=False)
         self.register_buffer("causal", torch.tril(torch.ones(L, L, dtype=torch.bool)), persistent=False)
         self._meta_cache = {}
+
+    @staticmethod
+    def _target_coord_meta(lay):
+        """Layout metadata with the output part's row/col shifted to the PREDICTED cell (ablation)."""
+        meta = lay.metadata()
+        row, col = meta["row"].clone(), meta["col"].clone()
+        rc = torch.arange(36)
+        row[lay.idx_output:lay.idx_output + 36] = rc // 6          # <OUTPUT> and answer tokens of cells 0..34
+        col[lay.idx_output:lay.idx_output + 36] = rc % 6
+        row[lay.out_start + 35] = T.NO_COORD                       # answer token of cell 35 predicts EOS
+        col[lay.out_start + 35] = T.NO_COORD
+        return {**meta, "row": row, "col": col}
 
     def layout_for(self, n_ops: int):
         return self.layout if n_ops == self.cfg.n_slots else self._layout_cls(n_ops)
@@ -118,7 +136,9 @@ class TransformerAR(GridModel):
             return {"pos": self.meta_pos, "seg": self.meta_seg, "row": self.meta_row, "col": self.meta_col}
         key = (n_ops, str(device))
         if key not in self._meta_cache:
-            self._meta_cache[key] = {k: v.to(device) for k, v in self._layout_cls(n_ops).metadata().items()}
+            lay = self._layout_cls(n_ops)
+            meta = self._target_coord_meta(lay) if self.cfg.target_coords else lay.metadata()
+            self._meta_cache[key] = {k: v.to(device) for k, v in meta.items()}
         return self._meta_cache[key]
 
     def forward_tokens(self, tokens: torch.Tensor, n_ops: int = None) -> torch.Tensor:

@@ -22,6 +22,8 @@ _SPECS: Dict[str, tuple] = {
     "causal_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal")),
     "looped_causal_encoder": (TransformerEncoder, lambda: TransformerConfig(tied=True, out_mode="causal")),
     "query_ar": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal_ar")),
+    "ar_slotpos_digiteos_target": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False, digit_head=True,
+                                                                            head_eos=True, target_coords=True)),
     "nexttoken_ar": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal_nexttoken")),
     # ablations of the original Transformer AR (notebook 31)
     "ar_slotpos": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False)),
@@ -71,7 +73,7 @@ def config_dict(model: GridModel) -> dict:
         d.pop("pe_base", None)
     for key, legacy in (("identity_token", False), ("op_format", "fixed"), ("conditioner", "concat"), ("row_sep", False),
                          ("out_mode", "inplace"), ("aux_vocab", False), ("ar_seq_pos", True),
-                         ("digit_head", False), ("head_eos", False)):
+                         ("digit_head", False), ("head_eos", False), ("target_coords", False)):
         if d.get(key) == legacy:
             d.pop(key)
     return d
