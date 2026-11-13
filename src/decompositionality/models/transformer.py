@@ -221,11 +221,12 @@ class TransformerAR(GridModel):
             is_digit = gen < 10
             return {"pred": torch.where(is_digit, gen, torch.full_like(gen, -1)), "valid": is_digit.all(dim=1),
                     "raw_tokens": gen, "eos_ok": seq[:, P0 + 36] == T.EOS_ID}
-        if self.cfg.digit_head:                           # 36 steps, digits only (always a valid grid), no EOS
-            P0 = lay.prefix_len
+        if self.cfg.digit_head:                           # 36 steps, digits only (always a valid grid); EOS is not
+            P0 = lay.prefix_len                           # predicted: it is simply appended (forced) at the end
             for _ in range(36):
                 nxt = self.forward_tokens(seq, n)[:, -1].argmax(dim=-1)
                 seq = torch.cat([seq, nxt[:, None]], dim=1)
+            seq = torch.cat([seq, torch.full_like(seq[:, :1], T.EOS_ID)], dim=1)
             gen = seq[:, P0:P0 + 36]
             return {"pred": gen, "valid": torch.ones(gen.shape[0], dtype=torch.bool, device=gen.device)}
         P0 = lay.prefix_len

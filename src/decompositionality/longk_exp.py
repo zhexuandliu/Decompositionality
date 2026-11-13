@@ -440,7 +440,7 @@ def multiseed_report(results_root, mode="full", seeds=(42, 43, 44), conditions=N
     colors = {"transformer_ar": "#2a78d6", "causal_encoder": "#8e6bd6", "query_ar": "#1baf7a",
               "ar_slotpos": "#eda100", "ar_digithead": "#e0457b", "ar_slotpos_digithead": "#555555",
               "ar_digiteos": "#e0457b", "ar_slotpos_digiteos": "#555555", "nexttoken_ar": "#0f6b4b",
-              "ar_slotpos_digiteos_target": "#000000"}
+              "ar_slotpos_digiteos_target": "#000000", "ar_slotpos_digithead_target": "#8c564b"}
     # main figure: one panel per training support
     fig, axes = plt.subplots(2, 3, figsize=(16, 8.5), squeeze=False)
     for ax, e in zip(axes.flat, conds):
