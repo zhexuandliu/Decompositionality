@@ -29,10 +29,9 @@ The last grid is the answer, and there are no separators between grids. Every ou
 coordinates of the cell it predicts **and the step it belongs to**. All 4 × 36 digits are supervised, with no EOS
 target. Initialization is identical to Aligned AR.
 
-| run | step embedding |
-|---|---|
-| `ar_trace_slotstep` (main) | the op-slot embedding of slot s (step s aligned with the operation it executes) |
-| `ar_trace_sepstep` (control) | an independent learned step table |
+**Step embedding.** Step s uses the op-slot embedding of slot s, so the grid of step s is aligned with the operation
+it executes (`ar_trace_slotstep`). A control with a separate step table (`ar_trace_sepstep`) exists but is not run
+here.
 
 **Evaluation.** Free-running generation of the whole trace; only the final grid is scored. This uses a smaller
 sampled test set than before (the trace is 4× longer to decode). The reference is Aligned AR without a trace on the
@@ -43,7 +42,7 @@ same setting (notebook 42: single operations 0.00, k = 3 0.00, k = 4 0.06).
 
 REPORT = r'''# --- Comparison with Aligned AR without a trace (notebook 42) ---------------------------------------------------------
 from decompositionality import shortcut_analysis as SA
-models = ["ar_slotpos_digithead_target", "ar_trace_slotstep", "ar_trace_sepstep"]
+models = ["ar_slotpos_digithead_target", "ar_trace_slotstep"]
 df = LX.per_k_accuracy(RESULTS_ROOT, MODE, [SEED], ["S4_k02"], SUBDIR, models)
 ok = df[df.status == "available"]
 print("Exact accuracy of the FINAL grid (rows: model, columns: test k; k = 1 = single operations; trained k = 0, 2):")
@@ -62,7 +61,7 @@ def build() -> Path:
     if p.exists() and any(c.get("outputs") for c in nbf.read(p, as_version=4).cells if c.cell_type == "code"):
         raise SystemExit(f"{p.name} contains saved outputs; refusing to overwrite it")
     cfg = (CONFIG.replace("__CONDS__", repr(["S4_k02"]))
-           .replace('RUN_MODELS = ["query_ar"]', 'RUN_MODELS = ["ar_trace_slotstep", "ar_trace_sepstep"]')
+           .replace('RUN_MODELS = ["query_ar"]', 'RUN_MODELS = ["ar_trace_slotstep"]')
            .replace('EVAL_PLAN = {"n_single_grids": 1000, "n_seen_per_k": 5000, "n_long_per_k": 20000}',
                     'EVAL_PLAN = {"n_single_grids": 500, "n_seen_per_k": 1000, "n_long_per_k": 4000}   # smaller: 4x longer decode'))
     assert '"ar_trace_slotstep"' in cfg and '"n_single_grids": 500' in cfg
