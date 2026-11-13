@@ -41,12 +41,15 @@ class TransformerConfig:
                                    # causal; all 36 answers predicted in parallel, nothing fed back) |
                                    # "causal_ar" (identical to "causal", except that output position j ALSO receives
                                    # the digit of cell j-1: the true one in training, its own prediction at test time;
-                                   # decoded cell by cell)
+                                   # decoded cell by cell) |
+                                   # "causal_nexttoken" (as "causal_ar", but ordinary next-token AR at the output
+                                   # positions: position j holds the digit of cell j-1 with cell j-1's OWN row/col and
+                                   # no query vector; position 0 holds a start vector; position j predicts cell j)
 
     def __post_init__(self):
         assert self.sequence_pe in SEQUENCE_PE_CHOICES, self.sequence_pe
         assert self.op_format in ("fixed", "variable"), self.op_format
-        assert self.out_mode in ("inplace", "causal", "causal_ar"), self.out_mode
+        assert self.out_mode in ("inplace", "causal", "causal_ar", "causal_nexttoken"), self.out_mode
 
 
 # ---------------------------------------------------------------------------
@@ -247,8 +250,9 @@ class TransformerEncoder(GridModel):
         d = cfg.d_model
         self.tok_emb = nn.Embedding(T.VOCAB_SIZE_AUX if cfg.aux_vocab else
                                     (T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.NONAR_VOCAB_SIZE), d)
-        self.causal_out = cfg.out_mode in ("causal", "causal_ar")
-        self.feedback = cfg.out_mode == "causal_ar"
+        self.causal_out = cfg.out_mode in ("causal", "causal_ar", "causal_nexttoken")
+        self.feedback = cfg.out_mode in ("causal_ar", "causal_nexttoken")
+        self.nexttoken = cfg.out_mode == "causal_nexttoken"
         if self.feedback:
             self.kind = "ar_query"
         # 0 = operation slot, 1 = grid cell [, 2 = output query]
@@ -267,6 +271,8 @@ class TransformerEncoder(GridModel):
         if self.feedback:
             # created AFTER gpt_init so every other tensor has exactly the causal-encoder initial values (same seed)
             self.start_emb = nn.Parameter(torch.randn(d) * 0.02)   # "no previous digit" for output position 0
+        if self.nexttoken:
+            del self.query_emb      # unused; it was created (and initialized) only so all other tensors match
         if cfg.sequence_pe != "learned":
             self.seq_pe = SequencePE(cfg.sequence_pe, n + 36, d, d // cfg.n_heads, cfg.pe_base)
         self.register_buffer("seq_pos", torch.arange(n + 36), persistent=False)
@@ -299,10 +305,18 @@ class TransformerEncoder(GridModel):
             # 36 output queries after [ops, input cells]; causal attention over the whole sequence; read the answers
             # at the queries (parallel, no feedback). Queries carry only their output cell's (row, col).
             B = tokens.shape[0]
-            q = (self.query_emb.weight[0] + self.row_emb(self.rows) + self.col_emb(self.cols)
-                 + self.type_emb.weight[2])                                 # [36, d]
-            q = q[None].expand(B, -1, -1)
-            if self.feedback:                                              # + digit of the PREVIOUS cell
+            if self.nexttoken:
+                # ordinary next-token AR: position j = token "digit of cell j-1" with cell j-1's OWN (row, col);
+                # position 0 = start vector (no row/col, like <OUTPUT>); the readout at position j predicts cell j
+                assert prev is not None
+                rc = self.row_emb(self.rows) + self.col_emb(self.cols)     # [36, d], cell order
+                fb = self.tok_emb(prev.long())[:, 1:] + rc[None, :-1]       # positions 1..35 <- cells 0..34
+                q = torch.cat([self.start_emb.expand(B, 1, -1), fb], dim=1) + self.type_emb.weight[2]
+            else:
+                q = (self.query_emb.weight[0] + self.row_emb(self.rows) + self.col_emb(self.cols)
+                     + self.type_emb.weight[2])                             # [36, d]
+                q = q[None].expand(B, -1, -1)
+            if self.feedback and not self.nexttoken:                       # + digit of the PREVIOUS cell
                 assert prev is not None
                 fb = self.tok_emb(prev.long())                              # [B, 36, d]
                 fb = torch.cat([self.start_emb.expand(B, 1, -1), fb[:, 1:]], dim=1)
