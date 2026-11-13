@@ -193,6 +193,11 @@ def model_config_for(cfg: ExperimentConfig, model_id: str):
     if is_auxtask(cfg.experiment):
         return aux_model_config(model_id, cfg.model_overrides.get(model_id))
     from .longk import is_longk, model_config as longk_model_config
+    from .auxlocal import is_auxlocal
+    if is_auxlocal(cfg.experiment):
+        c = longk_model_config(model_id, cfg.model_overrides.get(model_id))
+        c["aux3_vocab"] = True
+        return c
     if is_longk(cfg.experiment):
         # ONE config (capacity 7, identity vocabulary, variable count of real op tokens) for all four conditions
         return longk_model_config(model_id, cfg.model_overrides.get(model_id))
@@ -284,6 +289,11 @@ def run_config(cfg: ExperimentConfig, model_id: str, manifest_hash: str) -> dict
         d["capacity"] = LK.CAPACITY
         d["stream"] = "idext.record(seed,k,j); idext allocation/order; idslot placement stream"
         d["evaluated_checkpoint"] = "LAST (state.pt at the final update); best.pt kept for reference"
+        from . import auxlocal as AL
+        if AL.is_auxlocal(cfg.experiment):
+            d["aux_local"] = {"main_stream": AL.CONDITIONS[cfg.experiment][0], "main_per_update": 256,
+                              "aux_per_update": AL.CONDITIONS[cfg.experiment][1], "aux_ks": list(AL.AUX_KS),
+                              "aux_ops": "D: row 0 shifts right; E: top-left 2x2 block rotates cw; F: column 0 flips"}
     from . import rowsep as RS
     if RS.is_rowsep(cfg.experiment):
         e = cfg.experiment
@@ -438,7 +448,10 @@ def train_model(model_id: str, cfg: ExperimentConfig, manifests, val_set, subset
     if device.type == "cuda":
         torch.cuda.reset_peak_memory_stats(device)
     mb = probe_microbatch(model, tc, device, amp_dtype, log)
-    if cfg.is_auxtask:
+    from .auxlocal import AuxLocalStream, is_auxlocal
+    if is_auxlocal(cfg.experiment):
+        stream = AuxLocalStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
+    elif cfg.is_auxtask:
         from .auxtask import AuxStream
         stream = AuxStream(tc.seed, cfg.experiment, tc.effective_batch_size, manifests.heldout_bytes)
     elif cfg.is_longk:

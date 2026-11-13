@@ -216,6 +216,9 @@ def make_experiment_config(experiment: str, mode: str = "full", output_root: str
                           **IDSLOT_EXPERIMENTS, **ROWSEP_CONDITIONS, **LONGK_CONDITIONS, **AUX_CONDITIONS}:
             splits["n_test_grids"] = 2   # 2 grids x 364 words = 728 smoke test records
     tc = replace(tc, **train_overrides)
+    from .auxlocal import batch_size as auxlocal_batch, is_auxlocal
+    if is_auxlocal(experiment) and mode == "full" and "effective_batch_size" not in train_overrides:
+        tc = replace(tc, effective_batch_size=auxlocal_batch(experiment))   # 256 main (as notebook 36a) + aux
     root = output_root if mode == "full" else str(Path(output_root) / "smoke")
     cfg = ExperimentConfig(experiment=experiment, mode=mode, output_root=root,
                            models=list(models or MODEL_IDS), train=tc, **splits)

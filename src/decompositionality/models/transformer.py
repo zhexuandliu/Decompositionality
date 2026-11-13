@@ -34,6 +34,9 @@ class TransformerConfig:
                                    # embedding instead, every other token keeps only segment + row/col (ablation)
     digit_head: bool = False       # AR only. True = 10-way digit output head, loss on the 36 answer digits only
                                    # (no EOS target), 36 decoding steps (ablation)
+    aux3_vocab: bool = False       # AR only. Token table extended to the D/E/F auxiliary vocabulary (26 IDs); the
+                                   # extra rows are appended AFTER the standard init from a separate generator, so all
+                                   # other initial values equal the model without it (notebook 40)
     target_coords: bool = False    # AR only. True = in the output part, every position carries the (row, col) of the
                                    # cell it PREDICTS instead of its own token's: <OUTPUT> -> cell (0,0), answer token
                                    # of cell j-1 -> cell j, answer token of cell 35 (predicts EOS) -> no coordinate
@@ -104,6 +107,14 @@ class TransformerAR(GridModel):
             self.loss_label = ("AR teacher-forced NLL (36 answer digits + EOS; 11-way head)" if cfg.head_eos else
                                "AR teacher-forced NLL (36 answer digits; 10-way head, no EOS)")
         assert not cfg.head_eos or cfg.digit_head
+        if cfg.aux3_vocab:
+            assert cfg.digit_head and not cfg.aux_vocab
+            old = self.tok_emb.weight.data
+            g = torch.Generator().manual_seed(4040)
+            extra = torch.randn(T.VOCAB_SIZE_AUX3 - old.shape[0], d, generator=g) * 0.02
+            self.tok_emb = nn.Embedding(T.VOCAB_SIZE_AUX3, d)
+            with torch.no_grad():
+                self.tok_emb.weight.copy_(torch.cat([old, extra.to(old.dtype)], 0))
         if cfg.sequence_pe != "learned":          # nontrainable; built after init so it consumes no RNG
             self.seq_pe = SequencePE(cfg.sequence_pe, L, d, d // cfg.n_heads, cfg.pe_base)
         meta = self.layout.metadata()

@@ -53,8 +53,11 @@ VOCAB_SIZE_ROW = 21
 D_OP, E_OP, TASK_MAIN_OP, TASK_AUX_OP = 5, 6, 7, 8
 D_ID, E_ID, TASK_MAIN_ID, TASK_AUX_ID = 21, 22, 23, 24
 VOCAB_SIZE_AUX = 25
+# notebook 40: local rigid auxiliary operations D / E / F (slot values 5 / 6 / 9; F has its own token 25)
+F_OP, F_ID = 9, 25
+VOCAB_SIZE_AUX3 = 26
 _OP_SLOT_TO_TOKEN = torch.tensor([OP_TOKEN_BASE + 0, OP_TOKEN_BASE + 1, OP_TOKEN_BASE + 2, PAD_ID, IDENTITY_ID,
-                                  D_ID, E_ID, TASK_MAIN_ID, TASK_AUX_ID])
+                                  D_ID, E_ID, TASK_MAIN_ID, TASK_AUX_ID, F_ID])
 
 AR_LEN = 80
 IDX_BOS, IDX_OPS, IDX_SLOTS, IDX_GRID = 0, 1, (2, 3, 4), 5

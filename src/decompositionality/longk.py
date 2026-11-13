@@ -42,6 +42,8 @@ for _name, _ks in (("S7_k02", (0, 2)), ("S7_k023", (0, 2, 3)), ("S7_k0234", (0, 
 CONDITIONS["S4_k0234"] = (4, (0, 2, 3, 4))
 CONDITIONS["S6_k0234"] = (6, (0, 2, 3, 4))
 K0234_BY_S = ["S4_k0234", "S5_k0234", "S6_k0234", "S7_k0234"]
+# Notebook 40: S7_k0234 main task + local D/E/F auxiliary records (see auxlocal.py; main stream unchanged)
+CONDITIONS["S7_k0234_auxDEF"] = (7, (0, 2, 3, 4))
 NB21_CONDITIONS = ["S5_k0234", "S6_k02345", "S7_k02345", "S7_k023456"]
 S7_SWEEP = ["S7_k02", "S7_k023", "S7_k0234", "S7_k02345", "S7_k023456", "S7_k0234567"]
 STREAM_LONG_TEST = 1131
