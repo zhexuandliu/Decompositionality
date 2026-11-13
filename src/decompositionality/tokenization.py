@@ -134,6 +134,51 @@ class ARLayout:
         return out
 
 
+class ARTraceLayout(ARLayout):
+    """AR layout whose output is the TRACE: the grid after every operation slot (S grids x 36 digits)::
+
+        <BOS> <OPS> s_1..s_S <GRID> [36 input digits] <OUTPUT> [grid after slot 1] ... [grid after slot S] <EOS>
+
+    The last grid is the answer. Metadata adds ``step`` (0-based slot index of each trace digit's grid; -1 elsewhere)."""
+
+    def __init__(self, n_slots: int):
+        super().__init__(n_slots)
+        self.n_out = 36 * self.n_slots
+        self.out_digit_offsets = np.arange(36 * (self.n_slots - 1), 36 * self.n_slots)   # the final grid
+        self.idx_eos = self.out_start + self.n_out
+        self.length = self.idx_eos + 1
+
+    def metadata(self) -> dict:
+        L = self.length
+        seg = np.empty(L, dtype=np.int64)
+        row = np.full(L, NO_COORD, dtype=np.int64)
+        col = np.full(L, NO_COORD, dtype=np.int64)
+        step = np.full(L, -1, dtype=np.int64)
+        seg[self.idx_bos] = SEG_BOS
+        seg[self.idx_ops] = SEG_OPS_MARK
+        seg[list(self.idx_slots)] = SEG_OP_SLOT
+        seg[self.idx_grid] = SEG_GRID_MARK
+        seg[self.in_start:self.in_start + 36] = SEG_IN
+        seg[self.idx_output] = SEG_OUT_MARK
+        seg[self.out_start:self.out_start + self.n_out] = SEG_OUT
+        seg[self.idx_eos] = SEG_EOS
+        rc = np.arange(36)
+        row[self.in_start:self.in_start + 36], col[self.in_start:self.in_start + 36] = rc // 6, rc % 6
+        t = np.arange(self.n_out)
+        row[self.out_start:self.out_start + self.n_out] = (t % 36) // 6
+        col[self.out_start:self.out_start + self.n_out] = t % 6
+        step[self.out_start:self.out_start + self.n_out] = t // 36
+        return {"pos": torch.arange(L), "seg": torch.from_numpy(seg), "row": torch.from_numpy(row),
+                "col": torch.from_numpy(col), "step": torch.from_numpy(step)}
+
+    def serialize(self, ops: torch.Tensor, x: torch.Tensor, trace: torch.Tensor) -> torch.Tensor:
+        B = x.shape[0]
+        out = torch.cat([self.prefix(ops, x), trace.reshape(B, self.n_out).long(),
+                         torch.full((B, 1), EOS_ID, device=x.device, dtype=torch.long)], dim=1)
+        assert out.shape[1] == self.length
+        return out
+
+
 class ARRowLayout(ARLayout):
     """AR layout with a <ROW> separator between grid rows, in BOTH input and output (41 tokens per grid)::
 

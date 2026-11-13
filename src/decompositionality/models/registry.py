@@ -27,6 +27,10 @@ _SPECS: Dict[str, tuple] = {
     "ar_digithead_target": (TransformerAR, lambda: TransformerConfig(tied=False, digit_head=True, target_coords=True)),
     "ar_slotpos_digithead_target": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False,
                                                                              digit_head=True, target_coords=True)),
+    "ar_trace_slotstep": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False, digit_head=True,
+                                                                   target_coords=True, trace=True, step_emb="slot")),
+    "ar_trace_sepstep": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False, digit_head=True,
+                                                                  target_coords=True, trace=True, step_emb="separate")),
     "nexttoken_ar": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal_nexttoken")),
     # ablations of the original Transformer AR (notebook 31)
     "ar_slotpos": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False)),
@@ -77,7 +81,7 @@ def config_dict(model: GridModel) -> dict:
     for key, legacy in (("identity_token", False), ("op_format", "fixed"), ("conditioner", "concat"), ("row_sep", False),
                          ("out_mode", "inplace"), ("aux_vocab", False), ("ar_seq_pos", True),
                          ("digit_head", False), ("head_eos", False), ("target_coords", False),
-                         ("aux3_vocab", False)):
+                         ("aux3_vocab", False), ("trace", False), ("step_emb", "slot")):
         if d.get(key) == legacy:
             d.pop(key)
     return d

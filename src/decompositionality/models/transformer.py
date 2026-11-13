@@ -34,6 +34,10 @@ class TransformerConfig:
                                    # embedding instead, every other token keeps only segment + row/col (ablation)
     digit_head: bool = False       # AR only. True = 10-way digit output head, loss on the 36 answer digits only
                                    # (no EOS target), 36 decoding steps (ablation)
+    trace: bool = False            # AR only (Aligned AR). Output = the grid after EVERY slot (S x 36 digits, last = the
+                                   # answer); all trace digits are supervised; requires digit_head + target_coords
+    step_emb: str = "slot"         # trace only: embedding of the trace step s added to its digits: "slot" = the op-slot
+                                   # embedding of slot s (shared), "separate" = an independent learned step table
     aux3_vocab: bool = False       # AR only. Token table extended to the D/E/F auxiliary vocabulary (26 IDs); the
                                    # extra rows are appended AFTER the standard init from a separate generator, so all
                                    # other initial values equal the model without it (notebook 40)
@@ -62,6 +66,20 @@ class TransformerConfig:
 # Autoregressive decoder
 # ---------------------------------------------------------------------------
 
+def trace_targets(ops: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
+    """[B, S] op slots + [B, 6, 6] input -> [B, S x 36]: the grid after each slot (A/B/C applied, anything else kept)."""
+    from ..mirror_diag import P_A, P_B, P_C
+    dev = x.device
+    perms = {0: torch.as_tensor(P_A, device=dev), 1: torch.as_tensor(P_B, device=dev), 2: torch.as_tensor(P_C, device=dev)}
+    g = x.reshape(x.shape[0], 36).long()
+    out = []
+    for s in range(ops.shape[1]):
+        o = ops[:, s].long()[:, None]
+        g = torch.where(o == 0, g[:, perms[0]], torch.where(o == 1, g[:, perms[1]], torch.where(o == 2, g[:, perms[2]], g)))
+        out.append(g)
+    return torch.cat(out, dim=1)
+
+
 class TransformerAR(GridModel):
     kind = "ar"
     loss_label = "AR teacher-forced NLL (36 answer cells + EOS)"
@@ -70,9 +88,10 @@ class TransformerAR(GridModel):
         super().__init__()
         self.cfg, self.model_id = cfg, model_id
         d = cfg.d_model
-        self._layout_cls = T.ARRowLayout if cfg.row_sep else T.ARLayout
+        self._layout_cls = T.ARTraceLayout if cfg.trace else (T.ARRowLayout if cfg.row_sep else T.ARLayout)
         self.layout = self._layout_cls(cfg.n_slots)
         L = self.layout.length
+        L_pos = T.ARLayout(cfg.n_slots).length if cfg.trace else L   # trace: same table size as Aligned AR -> same init
         if cfg.row_sep:
             assert cfg.identity_token, "row-separator models extend the identity vocabulary"
         V = T.VOCAB_SIZE_ROW if cfg.row_sep else (T.VOCAB_SIZE_WITH_IDENTITY if cfg.identity_token else T.VOCAB_SIZE)
@@ -81,7 +100,7 @@ class TransformerAR(GridModel):
             V = T.VOCAB_SIZE_AUX
         self.tok_emb = nn.Embedding(V, d)
         if cfg.sequence_pe == "learned":          # legacy learned absolute 1D position table (max-size)
-            self.pos_emb = nn.Embedding(L, d)
+            self.pos_emb = nn.Embedding(L_pos, d)
         self.seg_emb = nn.Embedding(T.NUM_SEGMENTS, d)
         self.row_emb = nn.Embedding(7, d)  # 6 = not a grid token
         self.col_emb = nn.Embedding(7, d)
@@ -115,12 +134,22 @@ class TransformerAR(GridModel):
             self.tok_emb = nn.Embedding(T.VOCAB_SIZE_AUX3, d)
             with torch.no_grad():
                 self.tok_emb.weight.copy_(torch.cat([old, extra.to(old.dtype)], 0))
+        if cfg.trace:
+            assert cfg.digit_head and cfg.target_coords and not cfg.ar_seq_pos and not cfg.head_eos
+            assert cfg.step_emb in ("slot", "separate"), cfg.step_emb
+            self.loss_label = "AR teacher-forced NLL over the whole trace (S x 36 digits; 10-way head)"
+            if cfg.step_emb == "separate":       # after the standard init, from its own generator
+                g = torch.Generator().manual_seed(5050)
+                self.step_table = nn.Embedding(cfg.n_slots, d)
+                with torch.no_grad():
+                    self.step_table.weight.copy_(torch.randn(cfg.n_slots, d, generator=g) * 0.02)
         if cfg.sequence_pe != "learned":          # nontrainable; built after init so it consumes no RNG
             self.seq_pe = SequencePE(cfg.sequence_pe, L, d, d // cfg.n_heads, cfg.pe_base)
         meta = self.layout.metadata()
         if cfg.target_coords:
             assert not cfg.row_sep
             meta = self._target_coord_meta(self.layout)
+        self._meta_keys = list(meta)
         for k, v in meta.items():
             self.register_buffer(f"meta_{k}", v, persistent=False)
         self.register_buffer("causal", torch.tril(torch.ones(L, L, dtype=torch.bool)), persistent=False)
@@ -128,15 +157,22 @@ class TransformerAR(GridModel):
 
     @staticmethod
     def _target_coord_meta(lay):
-        """Layout metadata with the output part's row/col shifted to the PREDICTED cell (ablation)."""
+        """Layout metadata with the output part's row/col (and, for a trace, step) shifted to the PREDICTED cell."""
         meta = lay.metadata()
         row, col = meta["row"].clone(), meta["col"].clone()
-        rc = torch.arange(36)
-        row[lay.idx_output:lay.idx_output + 36] = rc // 6          # <OUTPUT> and answer tokens of cells 0..34
-        col[lay.idx_output:lay.idx_output + 36] = rc % 6
-        row[lay.out_start + 35] = T.NO_COORD                       # answer token of cell 35 predicts EOS
-        col[lay.out_start + 35] = T.NO_COORD
-        return {**meta, "row": row, "col": col}
+        n = lay.n_out                                              # 36, or S x 36 for a trace
+        t = torch.arange(n)
+        row[lay.idx_output:lay.idx_output + n] = (t % 36) // 6     # <OUTPUT> and output tokens 0..n-2 -> next cell
+        col[lay.idx_output:lay.idx_output + n] = t % 6
+        row[lay.out_start + n - 1] = T.NO_COORD                    # the last output token predicts EOS (unused)
+        col[lay.out_start + n - 1] = T.NO_COORD
+        out = {**meta, "row": row, "col": col}
+        if "step" in meta:
+            step = torch.full_like(meta["step"], -1)
+            step[lay.idx_output:lay.idx_output + n] = t // 36
+            step[lay.out_start + n - 1] = -1
+            out["step"] = step
+        return out
 
     def layout_for(self, n_ops: int):
         return self.layout if n_ops == self.cfg.n_slots else self._layout_cls(n_ops)
@@ -144,7 +180,7 @@ class TransformerAR(GridModel):
     def _meta(self, n_ops: int, device):
         """Layout metadata (contiguous positions 0..L-1, segments, row/col) for an instruction of n_ops tokens."""
         if n_ops == self.cfg.n_slots:
-            return {"pos": self.meta_pos, "seg": self.meta_seg, "row": self.meta_row, "col": self.meta_col}
+            return {k: getattr(self, f"meta_{k}") for k in self._meta_keys}
         key = (n_ops, str(device))
         if key not in self._meta_cache:
             lay = self._layout_cls(n_ops)
@@ -165,6 +201,11 @@ class TransformerAR(GridModel):
             sl = [i for i in sl if i < L]
             h = h.clone()
             h[:, sl] = h[:, sl] + self.slot_emb.weight[: len(sl)].to(h.dtype)
+            if "step" in meta:                     # trace: the step (slot) whose result this position predicts
+                st = meta["step"][:L]
+                idx = torch.nonzero(st >= 0).squeeze(1)
+                table = self.slot_emb.weight if self.cfg.step_emb == "slot" else self.step_table.weight
+                h[:, idx] = h[:, idx] + table[st[idx]].to(h.dtype)
         elif self.cfg.sequence_pe == "learned":
             h = (self.tok_emb(tokens) + self.pos_emb(meta["pos"][:L]) + self.seg_emb(meta["seg"][:L])
                  + self.row_emb(meta["row"][:L]) + self.col_emb(meta["col"][:L]))
@@ -186,7 +227,8 @@ class TransformerAR(GridModel):
         + EOS = 42 (row-separator layout), in sequence order."""
         n = self.n_ops_of(batch["ops"])
         lay = self.layout_for(n)
-        seq = lay.serialize(batch["ops"], batch["x"], batch["y"])
+        y = trace_targets(batch["ops"], batch["x"]) if self.cfg.trace else batch["y"]
+        seq = lay.serialize(batch["ops"], batch["x"], y)
         logits = self.forward_tokens(seq[:, :-1], n)       # positions 0..len-2
         targets = seq[:, 1:]                               # tokens 1..len-1
         sl = slice(lay.idx_output, lay.idx_eos)            # logits OUTPUT..EOS-1 -> tokens first answer..EOS
@@ -198,8 +240,8 @@ class TransformerAR(GridModel):
             tg = torch.where(tg == T.EOS_ID, torch.full_like(tg, 10), tg)
             ce = F.cross_entropy(lg.float().reshape(-1, 11), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
             return ce.mean(dim=1).mean(), {"answer_cell_nll": ce[:, :36].mean().detach(), "eos_nll": ce[:, 36].mean().detach()}
-        if self.cfg.digit_head:                      # 36 answer digits only (targets are digit tokens 0..9)
-            return cell_ce_per_example(lg[:, :36], tg[:, :36]).mean(), {}
+        if self.cfg.digit_head:                      # answer digits only (36, or the whole S x 36 trace); no EOS
+            return cell_ce_per_example(lg[:, :-1], tg[:, :-1]).mean(), {}
         ce = F.cross_entropy(lg.float().reshape(-1, lg.shape[-1]), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
         loss = ce.mean(dim=1).mean()       # plain mean over ALL supervised targets (37 legacy, 42 with <ROW>)
         lay = self.layout
@@ -211,7 +253,8 @@ class TransformerAR(GridModel):
 
     def val_cell_ce(self, batch):
         lg, tg = self._teacher_forced(batch)
-        dig = torch.as_tensor(self.layout.out_digit_offsets, device=lg.device)
+        lay = self.layout_for(self.n_ops_of(batch["ops"]))
+        dig = torch.as_tensor(lay.out_digit_offsets, device=lg.device)   # the (final) answer grid
         return cell_ce_per_example(lg[:, dig], tg[:, dig])  # teacher-forced answer-DIGIT CE (no EOS / ROW)
 
     @torch.no_grad()
@@ -234,11 +277,11 @@ class TransformerAR(GridModel):
                     "raw_tokens": gen, "eos_ok": seq[:, P0 + 36] == T.EOS_ID}
         if self.cfg.digit_head:                           # 36 steps, digits only (always a valid grid); EOS is not
             P0 = lay.prefix_len                           # predicted: it is simply appended (forced) at the end
-            for _ in range(36):
+            for _ in range(lay.n_out):                    # 36, or S x 36 for a trace
                 nxt = self.forward_tokens(seq, n)[:, -1].argmax(dim=-1)
                 seq = torch.cat([seq, nxt[:, None]], dim=1)
             seq = torch.cat([seq, torch.full_like(seq[:, :1], T.EOS_ID)], dim=1)
-            gen = seq[:, P0:P0 + 36]
+            gen = seq[:, P0:P0 + lay.n_out][:, torch.as_tensor(lay.out_digit_offsets, device=seq.device)]
             return {"pred": gen, "valid": torch.ones(gen.shape[0], dtype=torch.bool, device=gen.device)}
         P0 = lay.prefix_len
         n_out = lay.n_out
