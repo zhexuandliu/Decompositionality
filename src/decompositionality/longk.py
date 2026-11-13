@@ -38,6 +38,10 @@ CONDITIONS: Dict[str, tuple] = {
 for _name, _ks in (("S7_k02", (0, 2)), ("S7_k023", (0, 2, 3)), ("S7_k0234", (0, 2, 3, 4)),
                    ("S7_k0234567", (0, 2, 3, 4, 5, 6, 7))):
     CONDITIONS[_name] = (7, _ks)
+# Notebook 39: the same training support k0234 at S = 4 / 5 / 6 / 7 (S5_k0234 already defined above)
+CONDITIONS["S4_k0234"] = (4, (0, 2, 3, 4))
+CONDITIONS["S6_k0234"] = (6, (0, 2, 3, 4))
+K0234_BY_S = ["S4_k0234", "S5_k0234", "S6_k0234", "S7_k0234"]
 NB21_CONDITIONS = ["S5_k0234", "S6_k02345", "S7_k02345", "S7_k023456"]
 S7_SWEEP = ["S7_k02", "S7_k023", "S7_k0234", "S7_k02345", "S7_k023456", "S7_k0234567"]
 STREAM_LONG_TEST = 1131

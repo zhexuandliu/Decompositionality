@@ -61,7 +61,7 @@ def _outcome(ex, valid, ms, G):
 
 
 def analyse(results_root, mode="full", seed=42, conditions=None, models=None, show=True, log=print,
-            review_name="Shortcut_Analysis_S7_short_k_Review.ipynb"):
+            review_name="Shortcut_Analysis_S7_short_k_Review.ipynb", out_name=None):
     import pandas as pd
     from .longk_analysis import _records
     from .mirror_report import Report, write_review
@@ -70,13 +70,13 @@ def analyse(results_root, mode="full", seed=42, conditions=None, models=None, sh
     conditions = list(conditions or CONDITIONS)
     models = list(models or MODELS)
     R = Report(show)
-    out = LX.family_root(results_root, mode, SUBDIR) / "report" / f"seed_{seed}_shortcut_analysis"
-    R.md(f"# What do the models compute on held-out inputs? (S=7, seed {seed}, LAST checkpoint)\n"
+    out = LX.family_root(results_root, mode, SUBDIR) / "report" / (out_name or f"seed_{seed}_shortcut_analysis")
+    R.md(f"# What do the models compute on held-out inputs? (seed {seed}, LAST checkpoint)\n"
          "Read-only: rebuilt sampled test sets are checked record-by-record against the saved predictions. "
          "A transform is written as its shortest A/B/C word (A = right shift, B = clockwise rotation, "
          "C = left-right mirror; executed left to right). 'seen' = the transform is the overall transform of some "
          "trained instruction.")
-    T = {k: [] for k in ("status", "outcome", "outcome_slot", "wrong_transform", "per_op_slot", "long")}
+    T = {k: [] for k in ("status", "outcome", "outcome_slot", "wrong_transform", "per_op_slot", "long", "drop_index")}
     for e in conditions:
         S, ks = LK.CONDITIONS[e]
         seen = {G.word_id(w) for k in ks for w in words_of_length(k)}
@@ -132,13 +132,22 @@ def analyse(results_root, mode="full", seed=42, conditions=None, models=None, sh
                 drop = np.zeros(len(lq), bool)
                 trunc = np.zeros(len(lq), bool)
                 seen_t = np.zeros(len(lq), bool)
+                hit = np.zeros((len(lq), k1), bool)
                 for j, (mm, ww) in enumerate(zip(ms, w)):
                     if not mm or oc[j] == "correct":
                         continue
                     s = set(mm)
-                    drop[j] = any(G.word_id(ww[:i] + ww[i + 1:]) in s for i in range(len(ww)))
+                    for i in range(len(ww)):
+                        hit[j, i] = G.word_id(ww[:i] + ww[i + 1:]) in s
+                    drop[j] = hit[j].any()
                     trunc[j] = G.word_id(ww[:-1]) in s
                     seen_t[j] = bool(s & seen)
+                uniq = hit.sum(1) == 1
+                for i in range(k1):
+                    role = "first" if i == 0 else ("last" if i == k1 - 1 else "middle")
+                    T["drop_index"].append({**base, "k": k1, "dropped position": i + 1, "role": role,
+                                            "unique": int((hit[:, i] & uniq).sum()), "any": int(hit[:, i].sum()),
+                                            "share of unique drops": round((hit[:, i] & uniq).sum() / max(1, uniq.sum()), 3)})
                 c = Counter(oc)
                 n = len(lq)
                 T["long"].append({**base, "k": k1, "records": n, "correct": round(c.get("correct", 0) / n, 3),
@@ -148,6 +157,10 @@ def analyse(results_root, mode="full", seed=42, conditions=None, models=None, sh
                                                                   + c.get("several legal transforms", 0)) / n, 3),
                                   "no legal / invalid": round((c.get("no legal transform", 0) + c.get("invalid output", 0)) / n, 3)})
     R.table("Availability", pd.DataFrame(T["status"]), 30)
+    R.md("**Which operation is dropped?** For held-out longer instructions whose prediction equals the word with exactly "
+         "ONE operation removed, the position (1 = first, k = last) of that operation. 'unique' counts only records where "
+         "exactly one position fits; 'any' counts every fitting position.")
+    R.table("5. First held-out longer k: which operation is dropped", pd.DataFrame(T["drop_index"]), 60)
     R.table("1. Singletons: outcome shares by operation", pd.DataFrame(T["outcome"]), 60)
     R.table("2. Wrong singletons that apply ONE other legal transform: the five most common, as shortest words",
             pd.DataFrame(T["wrong_transform"]), 200)
