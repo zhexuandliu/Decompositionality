@@ -17,7 +17,7 @@ MODEL_IDS = [
 EXTRA_MODEL_IDS = ["causal_encoder", "looped_causal_encoder", "query_ar", "ar_slotpos", "ar_digithead",
                    "ar_slotpos_digithead", "ar_digiteos", "ar_slotpos_digiteos", "nexttoken_ar",
                    "ar_slotpos_digiteos_target", "ar_slotpos_digithead_target", "ar_digithead_target",
-                   "ar_trace_slotstep", "ar_trace_sepstep"]
+                   "ar_trace_slotstep", "ar_trace_sepstep", "ar_scratch_slotstep"]
 
 DISPLAY_NAMES = {
     "causal_encoder": "Causal encoder (parallel output queries)",
@@ -32,6 +32,7 @@ DISPLAY_NAMES = {
     "ar_slotpos_digithead_target": "Transformer AR without pos(t) + 10-way head (36 digits, forced EOS) + target coords",
     "ar_trace_slotstep": "Aligned AR + intermediate grids (step = op-slot embedding)",
     "ar_trace_sepstep": "Aligned AR + intermediate grids (separate step embedding)",
+    "ar_scratch_slotstep": "Aligned AR + unsupervised scratch grids (step = op-slot embedding)",
     "nexttoken_ar": "Query AR with ordinary next-token feedback (position holds cell j-1 with its own row/col)",
     "ar_slotpos_digiteos": "Transformer AR without pos(t) + 11-way head (digits + EOS)",
     "transformer_ar": "Transformer AR",

@@ -36,6 +36,9 @@ class TransformerConfig:
                                    # (no EOS target), 36 decoding steps (ablation)
     trace: bool = False            # AR only (Aligned AR). Output = the grid after EVERY slot (S x 36 digits, last = the
                                    # answer); all trace digits are supervised; requires digit_head + target_coords
+    scratch: bool = False          # trace only. True = the S-1 intermediate grids are UNSUPERVISED scratch positions: they
+                                   # hold a learned scratch vector (no digit), keep their step + target-cell embeddings,
+                                   # and only the final grid is predicted (autoregressively) and supervised
     step_emb: str = "slot"         # trace only: embedding of the trace step s added to its digits: "slot" = the op-slot
                                    # embedding of slot s (shared), "separate" = an independent learned step table
     aux3_vocab: bool = False       # AR only. Token table extended to the D/E/F auxiliary vocabulary (26 IDs); the
@@ -126,6 +129,7 @@ class TransformerAR(GridModel):
             self.loss_label = ("AR teacher-forced NLL (36 answer digits + EOS; 11-way head)" if cfg.head_eos else
                                "AR teacher-forced NLL (36 answer digits; 10-way head, no EOS)")
         assert not cfg.head_eos or cfg.digit_head
+        assert not cfg.scratch or cfg.trace
         if cfg.aux3_vocab:
             assert cfg.digit_head and not cfg.aux_vocab
             old = self.tok_emb.weight.data
@@ -138,6 +142,10 @@ class TransformerAR(GridModel):
             assert cfg.digit_head and cfg.target_coords and not cfg.ar_seq_pos and not cfg.head_eos
             assert cfg.step_emb in ("slot", "separate"), cfg.step_emb
             self.loss_label = "AR teacher-forced NLL over the whole trace (S x 36 digits; 10-way head)"
+            if cfg.scratch:                      # content vector of every scratch position (after the standard init)
+                g = torch.Generator().manual_seed(6060)
+                self.scratch_vec = nn.Parameter(torch.randn(d, generator=g) * 0.02)
+                self.loss_label = "AR NLL of the FINAL grid only (36 digits); S-1 unsupervised scratch grids"
             if cfg.step_emb == "separate":       # after the standard init, from its own generator
                 g = torch.Generator().manual_seed(5050)
                 self.step_table = nn.Embedding(cfg.n_slots, d)
@@ -195,7 +203,14 @@ class TransformerAR(GridModel):
         meta = self._meta(self.cfg.n_slots if n_ops is None else n_ops, tokens.device)
         cos = sin = None
         if self.cfg.sequence_pe == "learned" and not self.cfg.ar_seq_pos:     # no pos(t); op-slot embedding
-            h = (self.tok_emb(tokens) + self.seg_emb(meta["seg"][:L])
+            tok = self.tok_emb(tokens)
+            if self.cfg.scratch:                   # scratch positions carry the scratch vector instead of a digit
+                lay_ = self.layout_for(self.cfg.n_slots if n_ops is None else n_ops)
+                a, b = lay_.out_start, min(L, lay_.out_start + lay_.n_out - 36)
+                if b > a:
+                    tok = tok.clone()
+                    tok[:, a:b] = self.scratch_vec.to(tok.dtype)
+            h = (tok + self.seg_emb(meta["seg"][:L])
                  + self.row_emb(meta["row"][:L]) + self.col_emb(meta["col"][:L]))
             sl = list(self.layout_for(self.cfg.n_slots if n_ops is None else n_ops).idx_slots)
             sl = [i for i in sl if i < L]
@@ -227,7 +242,13 @@ class TransformerAR(GridModel):
         + EOS = 42 (row-separator layout), in sequence order."""
         n = self.n_ops_of(batch["ops"])
         lay = self.layout_for(n)
-        y = trace_targets(batch["ops"], batch["x"]) if self.cfg.trace else batch["y"]
+        if self.cfg.scratch:                       # scratch grids: placeholder digits (never seen by the model)
+            yf = batch["y"].reshape(batch["x"].shape[0], 36).long()
+            y = torch.cat([torch.zeros_like(yf).repeat(1, n - 1), yf], dim=1)
+        elif self.cfg.trace:
+            y = trace_targets(batch["ops"], batch["x"])
+        else:
+            y = batch["y"]
         seq = lay.serialize(batch["ops"], batch["x"], y)
         logits = self.forward_tokens(seq[:, :-1], n)       # positions 0..len-2
         targets = seq[:, 1:]                               # tokens 1..len-1
@@ -240,6 +261,8 @@ class TransformerAR(GridModel):
             tg = torch.where(tg == T.EOS_ID, torch.full_like(tg, 10), tg)
             ce = F.cross_entropy(lg.float().reshape(-1, 11), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
             return ce.mean(dim=1).mean(), {"answer_cell_nll": ce[:, :36].mean().detach(), "eos_nll": ce[:, 36].mean().detach()}
+        if self.cfg.scratch:                         # the final grid only
+            return cell_ce_per_example(lg[:, -37:-1], tg[:, -37:-1]).mean(), {}
         if self.cfg.digit_head:                      # answer digits only (36, or the whole S x 36 trace); no EOS
             return cell_ce_per_example(lg[:, :-1], tg[:, :-1]).mean(), {}
         ce = F.cross_entropy(lg.float().reshape(-1, lg.shape[-1]), tg.reshape(-1), reduction="none").view(lg.shape[0], -1)
@@ -275,6 +298,14 @@ class TransformerAR(GridModel):
             is_digit = gen < 10
             return {"pred": torch.where(is_digit, gen, torch.full_like(gen, -1)), "valid": is_digit.all(dim=1),
                     "raw_tokens": gen, "eos_ok": seq[:, P0 + 36] == T.EOS_ID}
+        if self.cfg.scratch:                              # scratch positions appended at once; final grid decoded
+            P0 = lay.prefix_len
+            seq = torch.cat([seq, torch.zeros_like(seq[:, :1]).repeat(1, lay.n_out - 36)], dim=1)
+            for _ in range(36):
+                nxt = self.forward_tokens(seq, n)[:, -1].argmax(dim=-1)
+                seq = torch.cat([seq, nxt[:, None]], dim=1)
+            gen = seq[:, P0 + lay.n_out - 36:P0 + lay.n_out]
+            return {"pred": gen, "valid": torch.ones(gen.shape[0], dtype=torch.bool, device=gen.device)}
         if self.cfg.digit_head:                           # 36 steps, digits only (always a valid grid); EOS is not
             P0 = lay.prefix_len                           # predicted: it is simply appended (forced) at the end
             for _ in range(lay.n_out):                    # 36, or S x 36 for a trace

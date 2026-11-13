@@ -28,7 +28,8 @@ CONDITIONS = ["S7_k02", "S7_k023", "S7_k0234", "S7_k02345"]
 MODELS = ["transformer_ar", "ar_slotpos_digithead_target", "query_ar", "causal_encoder"]
 LABELS = {"transformer_ar": "original AR", "ar_slotpos_digithead_target": "AR34", "query_ar": "query AR",
           "causal_encoder": "causal encoder", "ar_trace_slotstep": "Aligned AR + grids (slot step)",
-          "ar_trace_sepstep": "Aligned AR + grids (separate step)"}
+          "ar_trace_sepstep": "Aligned AR + grids (separate step)",
+          "ar_scratch_slotstep": "Aligned AR + scratch (no step loss)"}
 
 
 def shortest_words(G) -> dict:
