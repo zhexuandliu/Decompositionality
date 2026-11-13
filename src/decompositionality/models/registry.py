@@ -24,6 +24,7 @@ _SPECS: Dict[str, tuple] = {
     "query_ar": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal_ar")),
     "ar_slotpos_digiteos_target": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False, digit_head=True,
                                                                             head_eos=True, target_coords=True)),
+    "ar_digithead_target": (TransformerAR, lambda: TransformerConfig(tied=False, digit_head=True, target_coords=True)),
     "ar_slotpos_digithead_target": (TransformerAR, lambda: TransformerConfig(tied=False, ar_seq_pos=False,
                                                                              digit_head=True, target_coords=True)),
     "nexttoken_ar": (TransformerEncoder, lambda: TransformerConfig(tied=False, out_mode="causal_nexttoken")),

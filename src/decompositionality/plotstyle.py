@@ -28,6 +28,7 @@ MODEL_STYLE = {
     "ar_slotpos_digithead": dict(color="#555555", hatch=None, ls="-"),
     "ar_digiteos": dict(color="#e0457b", hatch=None, ls="-"),
     "ar_slotpos_digiteos_target": dict(color="#555555", hatch=None, ls="--"),
+    "ar_digithead_target": dict(color="#17becf", hatch=None, ls="-"),
     "ar_slotpos_digithead_target": dict(color="#8c564b", hatch=None, ls="-"),
     "nexttoken_ar": dict(color="#1baf7a", hatch=None, ls="--"),
     "ar_slotpos_digiteos": dict(color="#555555", hatch=None, ls="-"),
