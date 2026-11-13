@@ -22,9 +22,9 @@ CONDITION = "S7_k02345"
 SUBDIR = "S7_support_sweep_20k_v1"
 ABLATIONS = ["ar_slotpos", "ar_digiteos", "ar_slotpos_digiteos"]
 COMPARE = ["transformer_ar", "ar_slotpos", "ar_digiteos", "ar_slotpos_digiteos", "ar_slotpos_digiteos_target",
-           "ar_slotpos_digithead_target", "nexttoken_ar", "query_ar", "causal_encoder"]
-LABELS = {"transformer_ar": "original AR", "ar_slotpos": "AR − pos(t)", "ar_digithead": "AR + 10-way head",
-          "ar_slotpos_digithead": "AR − pos(t) + 10-way head", "ar_digiteos": "AR + 11-way head (digits+EOS)",
+           "ar_digithead", "ar_slotpos_digithead", "ar_slotpos_digithead_target", "nexttoken_ar", "query_ar", "causal_encoder"]
+LABELS = {"transformer_ar": "original AR", "ar_slotpos": "AR − pos(t)", "ar_digithead": "AR + 10-way head (36 digits)",
+          "ar_slotpos_digithead": "AR − pos(t) + 10-way head (36 digits)", "ar_digiteos": "AR + 11-way head (digits+EOS)",
           "ar_slotpos_digiteos": "AR − pos(t) + 11-way head", "nexttoken_ar": "query AR, next-token feedback",
           "ar_slotpos_digiteos_target": "AR − pos(t) + 11-way head + target coords",
           "ar_slotpos_digithead_target": "AR − pos(t) + 10-way head (36 digits) + target coords", "query_ar": "query AR", "causal_encoder": "causal encoder"}
