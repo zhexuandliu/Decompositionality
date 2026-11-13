@@ -117,3 +117,110 @@ def report(results_root, mode="full", seed=42, models=None, show=True, log=print
                       review_name)
     log(f"REVIEW FILE: {rp}")
     return rp
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Notebook 41: figure of the three-change recipe (read-only)
+# ---------------------------------------------------------------------------------------------------------------------
+RECIPE_MODELS = ["transformer_ar", "ar_slotpos_digithead", "ar_digithead_target", "ar_slotpos_digithead_target"]
+RECIPE_LABELS = {"transformer_ar": "Original AR",
+                 "ar_slotpos_digithead": "No pos(t) + 10-way head (35b)",
+                 "ar_digithead_target": "pos(t) + 10-way head + target coords (35c)",
+                 "ar_slotpos_digithead_target": "No pos(t) + 10-way head + target coords (AR34)"}
+# Okabe-Ito (colour-blind safe); the original AR is the neutral grey baseline
+RECIPE_COLORS = {"transformer_ar": "#7a7a7a", "ar_slotpos_digithead": "#E69F00", "ar_digithead_target": "#56B4E9",
+                 "ar_slotpos_digithead_target": "#009E73"}
+RECIPE_MARKERS = {"transformer_ar": "o", "ar_slotpos_digithead": "s", "ar_digithead_target": "^",
+                  "ar_slotpos_digithead_target": "D"}
+
+
+def plot_recipe(results_root, mode="full", seed=42, condition=CONDITION, models=None, show=True, log=print,
+                review_name="AR_Recipe_Figures_Review.ipynb"):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from .mirror_report import Report, write_review
+    models = list(models or RECIPE_MODELS)
+    S, ks = LK.CONDITIONS[condition]
+    out = LX.family_root(results_root, mode, SUBDIR) / "report" / f"seed_{seed}_ar_recipe_figures"
+    R = Report(show)
+    R.md(f"# Transformer AR: which changes make it generalize? ({condition}, seed {seed}, LAST checkpoint)\n"
+         "Trained k = " + ", ".join(map(str, ks)) + f" in {S} slots. Held out: singletons (k=1) at every slot, k=6, k=7.")
+    rows, srows, status = [], [], []
+    for m in models:
+        cfg = LX.make_cfg(condition, results_root, mode, [m], seed, SUBDIR)
+        d = LX.load_eval(cfg, m)
+        if not d:
+            status.append({"model": RECIPE_LABELS.get(m, m), "status": "not available"})
+            continue
+        status.append({"model": RECIPE_LABELS.get(m, m), "status": "ok"})
+        k, ex = d["k"].astype(int), d["exact"].astype(bool)
+        words = d["string"].astype(str)
+        for kk in sorted(set(k.tolist())):
+            rows.append({"model": m, "k": kk, "exact_acc": ex[k == kk].mean(), "records": int((k == kk).sum())})
+        for op in "ABC":
+            q = (k == 1) & (words == op)
+            srows.append({"model": m, "op": op, "exact_acc": ex[q].mean()})
+    R.table("Availability", pd.DataFrame(status), 10)
+    if not rows:
+        return None
+    A, Sg = pd.DataFrame(rows), pd.DataFrame(srows)
+    plt.rcParams.update({"axes.spines.top": False, "axes.spines.right": False, "font.size": 10})
+    # ---- figure 1: accuracy vs test k --------------------------------------------------------------------------------
+    fig, ax = plt.subplots(figsize=(7.5, 5.0))
+    for kk in ks:
+        ax.axvspan(kk - 0.5, kk + 0.5, color="#f0f0f0", zorder=0, lw=0)
+    ax.axvline(max(ks) + 0.5, color="#b0b0b0", ls="--", lw=1)
+    for m in models:
+        q = A[A.model == m].sort_values("k")
+        if not len(q):
+            continue
+        held = ~q.k.isin(ks)
+        ax.plot(q.k, q.exact_acc, color=RECIPE_COLORS[m], lw=2, zorder=3, label=RECIPE_LABELS[m])
+        ax.scatter(q.k[~held], q.exact_acc[~held], color=RECIPE_COLORS[m], marker=RECIPE_MARKERS[m], s=40, zorder=4,
+                   edgecolors="white", linewidths=1.5)
+        ax.scatter(q.k[held], q.exact_acc[held], facecolors="white", edgecolors=RECIPE_COLORS[m],
+                   marker=RECIPE_MARKERS[m], s=55, lw=2, zorder=4)
+    ax.set(xlabel="test instruction length k  (k = 1: singletons)", ylabel="exact-match accuracy", ylim=(-0.03, 1.05),
+           xlim=(-0.5, S + 0.5), xticks=range(0, S + 1))
+    ax.grid(axis="y", color="#e6e6e6", lw=0.8)
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=2, frameon=False)
+    ax.set_title(f"{condition}: accuracy by test length\n(grey bands = trained k; open markers = held out)", fontsize=10)
+    fig.tight_layout()
+    R.fig(fig, "1. Accuracy by test length", out / "figures" / "acc_vs_k.png")
+    # ---- figure 2: held-out metrics, grouped bars --------------------------------------------------------------------
+    metrics = [("singleton A", lambda m: Sg[(Sg.model == m) & (Sg.op == "A")].exact_acc),
+               ("singleton B", lambda m: Sg[(Sg.model == m) & (Sg.op == "B")].exact_acc),
+               ("singleton C", lambda m: Sg[(Sg.model == m) & (Sg.op == "C")].exact_acc)]
+    metrics += [(f"k = {kk}", (lambda kk: lambda m: A[(A.model == m) & (A.k == kk)].exact_acc)(kk))
+                for kk in range(max(ks) + 1, S + 1)]
+    present = [m for m in models if (A.model == m).any()]
+    fig, ax = plt.subplots(figsize=(8.5, 4.2))
+    w = 0.8 / len(present)
+    for i, m in enumerate(present):
+        vals = [float(f(m).iloc[0]) if len(f(m)) else np.nan for _, f in metrics]
+        xs = np.arange(len(metrics)) + (i - (len(present) - 1) / 2) * w
+        ax.bar(xs, vals, width=w * 0.92, color=RECIPE_COLORS[m], label=RECIPE_LABELS[m], edgecolor="white", lw=1)
+        for x, v in zip(xs, vals):
+            if not np.isnan(v):
+                ax.text(x, v + 0.015, f"{v:.2f}", ha="center", va="bottom", fontsize=6.5, color="#333333")
+    ax.set_xticks(range(len(metrics)), [n for n, _ in metrics])
+    ax.set(ylabel="exact-match accuracy", ylim=(0, 1.12))
+    ax.grid(axis="y", color="#e6e6e6", lw=0.8)
+    ax.set_axisbelow(True)
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.12), ncol=2, frameon=False)
+    ax.set_title(f"{condition}: held-out accuracy", fontsize=10)
+    fig.tight_layout()
+    R.fig(fig, "2. Held-out accuracy: singletons by operation, longer instructions", out / "figures" / "heldout_bars.png")
+    tab = A.pivot_table(index="model", columns="k", values="exact_acc").reindex(present)
+    tab.index = [RECIPE_LABELS[m] for m in tab.index]
+    for op in "ABC":
+        tab[f"singleton {op}"] = [float(Sg[(Sg.model == m) & (Sg.op == op)].exact_acc.iloc[0]) for m in present]
+    R.table("3. Exact accuracy (columns 0–7 = test k)", tab.round(4).reset_index().rename(columns={"index": "model"}), 10)
+    (out / "tables").mkdir(parents=True, exist_ok=True)
+    A.to_csv(out / "tables" / "acc_by_k.csv", index=False)
+    Sg.to_csv(out / "tables" / "singletons_by_op.csv", index=False)
+    rp = write_review(R.items, out, "AR recipe figures", "# AR recipe figures — review snapshot\n\nBaked outputs.",
+                      review_name)
+    log(f"REVIEW FILE: {rp}")
+    log(f"FIGURES: {out / 'figures'}")
+    return rp
