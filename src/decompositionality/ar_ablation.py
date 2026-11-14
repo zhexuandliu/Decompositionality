@@ -224,3 +224,79 @@ def plot_recipe(results_root, mode="full", seed=42, condition=CONDITION, models=
     log(f"REVIEW FILE: {rp}")
     log(f"FIGURES: {out / 'figures'}")
     return rp
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Notebook 45: Aligned AR on S7_k02345 over several seeds (read-only plot)
+# ---------------------------------------------------------------------------------------------------------------------
+SEED_LABELS = {"ar_slotpos_digithead_target": "Aligned AR", "transformer_ar": "Standard AR"}
+SEED_COLORS = {"ar_slotpos_digithead_target": "#009E73", "transformer_ar": "#7a7a7a"}
+
+
+def plot_seeds(results_root, mode="full", seeds=(42, 43, 44), condition=CONDITION, models=None, show=True, log=print,
+               review_name="AlignedAR_S7_k02345_3seeds_Review.ipynb"):
+    """Accuracy by test k for every seed (thin lines) and the mean (thick line), plus a per-seed table of held-out
+    accuracy (singletons A/B/C, longer k). Models without saved results are listed as unavailable and skipped."""
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    from .mirror_report import Report, write_review
+    models = list(models or ["ar_slotpos_digithead_target", "transformer_ar"])
+    seeds = list(seeds)
+    S, ks = LK.CONDITIONS[condition]
+    out = LX.family_root(results_root, mode, SUBDIR) / "report" / f"aligned_ar_{condition}_seeds"
+    R = Report(show)
+    R.md(f"# Aligned AR on {condition}: {len(seeds)} seeds {seeds} (LAST checkpoint, 20,000 updates)\n"
+         "Seeds change the initialization and the training stream; the test records are identical for every seed.")
+    rows, status = [], []
+    for m in models:
+        for sd in seeds:
+            cfg = LX.make_cfg(condition, results_root, mode, [m], sd, SUBDIR)
+            d = LX.load_eval(cfg, m)
+            status.append({"model": SEED_LABELS.get(m, m), "seed": sd, "status": "ok" if d else "not available"})
+            if not d:
+                continue
+            k, ex, w = d["k"].astype(int), d["exact"].astype(bool), d["string"].astype(str)
+            for kk in sorted(set(k.tolist())):
+                rows.append({"model": m, "seed": sd, "metric": f"k={kk}", "k": kk, "exact_acc": ex[k == kk].mean()})
+            for op in "ABC":
+                q = (k == 1) & (w == op)
+                rows.append({"model": m, "seed": sd, "metric": f"single {op}", "k": np.nan, "exact_acc": ex[q].mean()})
+    R.table("Availability", pd.DataFrame(status), 20)
+    if not rows:
+        return None
+    D = pd.DataFrame(rows)
+    plt.rcParams.update({"axes.spines.top": False, "axes.spines.right": False, "font.size": 10})
+    fig, ax = plt.subplots(figsize=(7.5, 4.6))
+    for kk in ks:
+        ax.axvspan(kk - 0.5, kk + 0.5, color="#f0f0f0", lw=0, zorder=0)
+    for m in models:
+        q = D[(D.model == m) & D.k.notna()]
+        if not len(q):
+            continue
+        c = SEED_COLORS.get(m, "#333333")
+        for sd in seeds:
+            qs = q[q.seed == sd].sort_values("k")
+            ax.plot(qs.k, qs.exact_acc, color=c, lw=1, alpha=0.45, zorder=2)
+        mean = q.groupby("k").exact_acc.agg(["mean", "min", "max", "count"]).reset_index()
+        ax.fill_between(mean.k, mean["min"], mean["max"], color=c, alpha=0.15, lw=0, zorder=1)
+        ax.plot(mean.k, mean["mean"], color=c, lw=2.5, marker="o", zorder=3,
+                label=f"{SEED_LABELS.get(m, m)} (mean of {int(mean['count'].max())} seeds; thin = each seed)")
+    ax.set(xlabel="number of operations k  (k = 1: single operation)", ylabel="exact-match accuracy",
+           ylim=(-0.03, 1.05), xticks=range(0, S + 1))
+    ax.grid(axis="y", color="#e6e6e6", lw=0.8)
+    ax.set_title(f"{S} slots, trained on k = " + ", ".join(map(str, ks)) + " (grey); band = min–max over seeds",
+                 fontsize=9.5)
+    ax.legend(fontsize=8, loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=1, frameon=False)
+    fig.tight_layout()
+    R.fig(fig, "Accuracy by test length over seeds", out / "figures" / "acc_vs_k_seeds.png")
+    held = [f"single {op}" for op in "ABC"] + [f"k={kk}" for kk in range(max(ks) + 1, S + 1)]
+    T = D[D.metric.isin(held)].pivot_table(index=["model", "seed"], columns="metric", values="exact_acc")[held]
+    T = T.reset_index()
+    T["model"] = T.model.map(lambda m: SEED_LABELS.get(m, m))
+    R.table("Held-out accuracy per seed", T.round(4), 20)
+    (out / "tables").mkdir(parents=True, exist_ok=True)
+    D.to_csv(out / "tables" / "per_seed.csv", index=False)
+    rp = write_review(R.items, out, "Aligned AR seeds", "# Aligned AR over seeds — review snapshot\n\nBaked outputs.",
+                      review_name)
+    log(f"REVIEW FILE: {rp}")
+    return rp
