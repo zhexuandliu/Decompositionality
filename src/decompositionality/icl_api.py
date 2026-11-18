@@ -198,7 +198,19 @@ def parse_ops(text: Optional[str]) -> Optional[str]:
     m = re.findall(r"<ops>(.*?)</ops>", text, re.S)
     if not m:
         return None
-    return "".join(re.findall(r"(?<![A-Za-z])([ABC])(?![A-Za-z])", m[-1]))
+    num = {"once": 1, "twice": 2, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7}
+    pat = (r"(?<![A-Za-z])([ABC])(?![A-Za-z])"
+           r"(?:\s*(?:x|×)\s*(\d)|\s+(\d|two|three|four|five|six|seven)\s+times|\s+(twice|once))?")
+    toks = re.findall(pat, m[-1])
+    if toks:   # letters, with repetitions such as "A five times", "A x3", "B twice"
+        out = ""
+        for ch, n1, n2, n3 in toks:
+            n = n1 or n2 or n3
+            out += ch * (int(n) if n.isdigit() else num.get(n, 1)) if n else ch
+        return out
+    # the model sometimes describes the operations in words instead of letters
+    words = re.findall(r"shift|rotat|mirror|flip|reflect", m[-1].lower())
+    return "".join({"shift": "A", "rotat": "B"}.get(w, "C") for w in words)
 
 
 def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
