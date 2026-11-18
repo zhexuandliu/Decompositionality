@@ -34,9 +34,16 @@ from . import mirror_diag as M
 
 N = 6
 K2_WORDS = ["".join(p) for p in itertools.permutations("ABC", 2)]          # AB AC BA BC CA CB
-EXPERIMENTS = ("answer", "ops")
+EXPERIMENTS = ("answer", "ops")                 # with the operation hint (notebooks 46 / 47)
+EXPERIMENTS_NEUTRAL = ("answer", "describe")    # no hint: give the grid / describe the rule in words first
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# NEUTRAL header (default): nothing about which operations exist or how many steps the transformation has.
+HEADER_NEUTRAL = (
+    "Each example below shows a 6x6 grid of digits (Input) and the grid obtained by applying the same hidden "
+    "transformation to it (Output). The transformation is the same for every example."
+)
+# HINT header (notebooks 46 / 47 only): lists the three operations. Kept to reproduce those runs.
 HEADER = (
     "Each example below shows a 6x6 grid of digits (Input) and the grid obtained by applying the same hidden "
     "transformation to it (Output). The transformation is the same for every example. The hidden transformation is "
@@ -48,6 +55,8 @@ HEADER = (
 GRID_FORMAT = "a 6x6 grid of digits in the same format (6 lines of 6 space-separated digits), between <answer> and </answer>."
 INSTRUCTION = {
     "answer": "Give your answer as " + GRID_FORMAT,
+    "describe": ("First, describe the transformation in words, between <rule> and </rule>.\n"
+                 "Then give your answer as " + GRID_FORMAT),
     "ops": ("First, state the transformation as a sequence of these operations, between <ops> and </ops>.\n"
             "Then give your answer as " + GRID_FORMAT),
 }
@@ -119,10 +128,15 @@ def with_demos(tasks: List[dict], n: int) -> List[dict]:
     return [{**t, "demo_inputs": t["demo_inputs"][:n], "demo_outputs": t["demo_outputs"][:n]} for t in tasks]
 
 
-def build_prompt(task: dict, experiment: str) -> str:
+def build_prompt(task: dict, experiment: str, hint: bool) -> str:
+    """``hint`` must be given explicitly: False = neutral prompt (no information about the operations);
+    True = the notebook-46/47 prompt that lists operations A, B, C ("ops" experiment only with the hint)."""
+    if experiment == "ops" and not hint:
+        raise ValueError("the 'ops' experiment names operations A/B/C and needs hint=True; use 'describe'")
+    header = HEADER if hint else HEADER_NEUTRAL
     demos = "\n\n".join(f"Example {i + 1}\nInput:\n{_fmt(x)}\nOutput:\n{_fmt(y)}"
                         for i, (x, y) in enumerate(zip(task["demo_inputs"], task["demo_outputs"])))
-    return (f"{HEADER}\n\n{demos}\n\nApply the same transformation to this grid:\n{_fmt(task['query'])}\n\n"
+    return (f"{header}\n\n{demos}\n\nApply the same transformation to this grid:\n{_fmt(task['query'])}\n\n"
             f"{INSTRUCTION[experiment]}")
 
 
@@ -167,7 +181,7 @@ def call_openrouter(prompt: str, model: str, reasoning: Optional[dict] = None, m
     return {"content": None, "reasoning": None, "usage": None, "model": None, "error": f"failed after retries: {last}"}
 
 
-def run(tasks: List[dict], out_jsonl, model: str, experiments=EXPERIMENTS, reasoning: Optional[dict] = None,
+def run(tasks: List[dict], out_jsonl, model: str, experiments=EXPERIMENTS, *, hint: bool, reasoning: Optional[dict] = None,
         max_tokens: Optional[int] = None, workers: int = 4, limit: Optional[int] = None,
         call: Callable = call_openrouter, log=print) -> int:
     """Calls the model for every (task, experiment) not yet in ``out_jsonl``; appends one JSON line per call.
@@ -190,10 +204,10 @@ def run(tasks: List[dict], out_jsonl, model: str, experiments=EXPERIMENTS, reaso
     n_ok = 0
 
     def one(t, e):
-        prompt = build_prompt(t, e)
+        prompt = build_prompt(t, e, hint)
         t0 = time.time()
         res = call(prompt, model, reasoning=reasoning, max_tokens=max_tokens)
-        return {"task_id": t["task_id"], "word": t["word"], "experiment": e, "model_requested": model,
+        return {"task_id": t["task_id"], "word": t["word"], "experiment": e, "hint": hint, "model_requested": model,
                 "reasoning_setting": reasoning, "seconds": round(time.time() - t0, 1), **res}
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
@@ -243,6 +257,33 @@ def parse_ops(text: Optional[str]) -> Optional[str]:
     return "".join({"shift": "A", "rotat": "B"}.get(w, "C") for w in words)
 
 
+def parse_rule(text: Optional[str]) -> Optional[str]:
+    if not text:
+        return None
+    m = re.findall(r"<rule>(.*?)</rule>", text, re.S)
+    return m[-1].strip() if m else None
+
+
+RULE_KEYWORDS = [("rotat", "rotate"), ("transpos", "transpose"), ("mirror", "mirror"), ("flip", "flip"),
+                 ("reflect", "reflect"), ("reverse", "reverse"), ("shift", "shift"), ("translat", "shift"),
+                 ("roll", "shift"), ("cyclic", "shift"), ("wrap", "shift")]
+
+
+def rule_keywords(rule: Optional[str]) -> str:
+    """Heuristic: the operation-like words in a free-text description, in order (for browsing, not scoring)."""
+    if not rule:
+        return ""
+    low = rule.lower()
+    hits = []
+    for key, name in RULE_KEYWORDS:
+        hits += [(m.start(), name) for m in re.finditer(key, low)]
+    out = []
+    for _, name in sorted(hits):
+        if not out or out[-1] != name:
+            out.append(name)
+    return " > ".join(out)
+
+
 def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
     """One row per successful call (the latest record per task/experiment)."""
     import pandas as pd
@@ -288,6 +329,10 @@ def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
             row["ops_literal"] = bool(ok and ops == t["word"])
             row["ops_consistent_with_answer"] = bool(ok and ans is not None and
                                                      np.array_equal(q[M.word_perm(ops)], ans.reshape(36)))
+        if e == "describe":
+            rule = parse_rule(r.get("content"))
+            row["rule"] = rule if rule is not None else "unparsed"
+            row["rule_keywords"] = rule_keywords(rule)
         u = r.get("usage") or {}
         row["prompt_tokens"] = u.get("prompt_tokens")
         row["completion_tokens"] = u.get("completion_tokens")
@@ -312,6 +357,10 @@ def summarize(df) -> Dict[str, "pd.DataFrame"]:
             .mean().round(3).reset_index()
         out["ops_stated"] = (o.groupby(["word", "ops_stated"]).size().rename("count").reset_index()
                              .sort_values(["word", "count"], ascending=[True, False]))
+    if (df.experiment == "describe").any():
+        d = df[df.experiment == "describe"]
+        out["rule_keywords"] = (d.groupby(["word", "rule_keywords"]).size().rename("count").reset_index()
+                                .sort_values(["word", "count"], ascending=[True, False]))
     cost = df[["prompt_tokens", "completion_tokens", "reasoning_tokens", "cost_usd"]].apply(
         pd.to_numeric, errors="coerce").sum().to_frame("total").T
     out["usage"] = cost
@@ -341,14 +390,13 @@ def plot_sweep(df, out_dir=None):
     and the stated-operations metrics vs demos. Returns the figure paths."""
     import matplotlib.pyplot as plt
     plt.rcParams.update({"axes.spines.top": False, "axes.spines.right": False, "font.size": 10})
-    colors = {"answer": "#0072B2", "ops": "#D55E00"}
-    labels = {"answer": "answer only", "ops": "state operations first"}
+    colors = {"answer": "#0072B2", "ops": "#D55E00", "describe": "#D55E00"}
+    labels = {"answer": "answer only", "ops": "state operations first", "describe": "describe the rule first"}
+    exps = [e for e in ("answer", "ops", "describe") if (df.experiment == e).any()]
     paths = []
     fig, ax = plt.subplots(figsize=(6.8, 4.2))
-    for e in ("answer", "ops"):
+    for e in exps:
         q = df[df.experiment == e]
-        if not len(q):
-            continue
         per_rep = q.groupby(["n_demos", "replicate"]).correct.mean().reset_index()
         mean = per_rep.groupby("n_demos").correct.mean()
         ax.plot(mean.index, mean.values, marker="o", lw=2, color=colors[e], label=labels[e])
@@ -365,11 +413,10 @@ def plot_sweep(df, out_dir=None):
     order = ["correct", "execution slip", "wrong transform", "other wrong grid", "unparsed"]
     cols = {"correct": "#009E73", "execution slip": "#E69F00", "wrong transform": "#D55E00",
             "other wrong grid": "#7a7a7a", "unparsed": "#cccccc"}
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
-    for ax, e in zip(axes, ("answer", "ops")):
+    fig, axes = plt.subplots(1, len(exps), figsize=(5.5 * len(exps), 4), sharey=True, squeeze=False)
+    axes = axes[0]
+    for ax, e in zip(axes, exps):
         q = df[df.experiment == e]
-        if not len(q):
-            continue
         tab = q.groupby("n_demos").error_type.value_counts(normalize=True).unstack(fill_value=0)
         bottom = np.zeros(len(tab))
         xs = np.arange(len(tab))
@@ -380,7 +427,7 @@ def plot_sweep(df, out_dir=None):
         ax.set_xticks(xs, tab.index.astype(str))
         ax.set(xlabel="number of demonstrations", title=labels[e])
     axes[0].set_ylabel("share of answers")
-    axes[1].legend(frameon=False, fontsize=8, bbox_to_anchor=(1.02, 1), loc="upper left")
+    axes[-1].legend(frameon=False, fontsize=8, bbox_to_anchor=(1.02, 1), loc="upper left")
     fig.tight_layout()
     if out_dir:
         paths.append(Path(out_dir) / "error_types_vs_demos.png"); fig.savefig(paths[-1], dpi=150)

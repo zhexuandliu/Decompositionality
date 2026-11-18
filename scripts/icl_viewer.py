@@ -125,6 +125,9 @@ def main():
             eq = bool(s.ops_equivalent)
             pills.append(f'<span class="pill {"ok" if eq else "bad"}">stated ops: '
                          f'{html.escape(str(s.ops_stated)) or "—"}</span>')
+        rule_block = ""
+        if r["experiment"] == "describe" and s is not None:
+            rule_block = f'<div class="meta"><b>stated rule:</b> {html.escape(str(s.rule))}</div>'
         u = r.get("usage") or {}
         rt = (u.get("completion_tokens_details") or {}).get("reasoning_tokens")
         meta = (f'{r["seconds"]} s · reasoning tokens {rt} · cost ${u.get("cost", 0) or 0:.5f} · '
@@ -137,7 +140,7 @@ def main():
  <div class="head"><span class="tid">{r['task_id']}</span><span class="pill">{r['experiment']}</span>{''.join(pills)}</div>
  <div class="grids">{demos}<div class="sep"></div>{grid_html(t['query'], label='query')}
  {grid_html(exp, label='expected')}{answer}</div>
- <div class="meta">{meta}</div>
+ {rule_block}<div class="meta">{meta}</div>
  <details><summary>reasoning summary</summary><pre>{reasoning}</pre></details>
  <details><summary>raw answer text</summary><pre>{content}</pre></details>
 </div>""")
@@ -149,9 +152,9 @@ def main():
 <style>{CSS}</style></head><body><main>
 <h1>{html.escape(path.name)}</h1>
 <div class="sub">{len(recs)} calls · accuracy by experiment: {html.escape(json.dumps(acc))} ·
-transformations: A = shift rows right, B = rotate 90° clockwise, C = mirror left–right (left to right)</div>
+hidden transformations: A = shift rows right, B = rotate 90° clockwise, C = mirror left–right (left to right)</div>
 <div class="bar">
- <select id="fexp"><option value="">all experiments</option><option>answer</option><option>ops</option></select>
+ <select id="fexp"><option value="">all experiments</option><option>answer</option><option>ops</option><option>describe</option></select>
  <select id="fres"><option value="">correct + wrong</option><option>correct</option><option>wrong</option></select>
  <select id="ferr"><option value="">all error types</option>{''.join(f'<option>{html.escape(e)}</option>' for e in errs)}</select>
  <select id="fword"><option value="">all transformations</option>{''.join(f'<option>{w}</option>' for w in words)}</select>
