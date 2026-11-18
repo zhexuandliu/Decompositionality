@@ -89,6 +89,36 @@ def make_tasks(words=K2_WORDS, n_per_word: int = 20, n_demos: int = 3, seed: int
     return tasks
 
 
+def make_nested_tasks(words=K2_WORDS, n_per_word: int = 20, max_demos: int = 10, seed: int = 0) -> List[dict]:
+    """Tasks with ``max_demos`` demos each, NESTED across demo counts: the task with n demos uses the first n. The
+    FIRST demo alone already determines the transformation uniquely (so every prefix does), and the query grid has
+    288 distinct images. Deterministic in (words, n_per_word, max_demos, seed)."""
+    G = M.group()
+    tasks = []
+    for wi, w in enumerate(words):
+        p = M.word_perm(w)
+        rng = np.random.default_rng([seed, wi, max_demos, 7])
+        j = 0
+        while j < n_per_word:
+            xs = [rng.integers(0, 10, (N, N)) for _ in range(max_demos)]
+            q = rng.integers(0, 10, (N, N))
+            ys = [x.reshape(36)[p].reshape(N, N) for x in xs]
+            if len(_consistent(G, xs[:1], ys[:1])) != 1:
+                continue
+            if len({q.reshape(36)[G.perms[i]].tobytes() for i in range(G.size)}) != G.size:
+                continue
+            tasks.append({"task_id": f"{w}-{j:03d}", "word": w, "group_id": int(G.word_id(w)),
+                          "demo_inputs": [x.tolist() for x in xs], "demo_outputs": [y.tolist() for y in ys],
+                          "query": q.tolist(), "expected": q.reshape(36)[p].reshape(N, N).tolist()})
+            j += 1
+    return tasks
+
+
+def with_demos(tasks: List[dict], n: int) -> List[dict]:
+    """The same tasks restricted to their first n demos."""
+    return [{**t, "demo_inputs": t["demo_inputs"][:n], "demo_outputs": t["demo_outputs"][:n]} for t in tasks]
+
+
 def build_prompt(task: dict, experiment: str) -> str:
     demos = "\n\n".join(f"Example {i + 1}\nInput:\n{_fmt(x)}\nOutput:\n{_fmt(y)}"
                         for i, (x, y) in enumerate(zip(task["demo_inputs"], task["demo_outputs"])))
@@ -237,6 +267,19 @@ def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
         if ans is not None:
             applied = [i for i in range(G.size) if np.array_equal(q[G.perms[i]], ans.reshape(36))]
         row["applied"] = SW[applied[0]] if applied else ("unparsed" if ans is None else "not a legal transform")
+        # error type: correct / wrong legal transform (misidentified) / execution slip (the nearest legal transform is
+        # the true one and >= 30 of 36 cells agree) / other wrong grid / unparsed
+        if ans is None:
+            row["error_type"] = "unparsed"
+        elif row["correct"]:
+            row["error_type"] = "correct"
+        elif applied:
+            row["error_type"] = "wrong transform"
+        else:
+            nb = M.nearest(G, ans.reshape(36), q)
+            row["wrong_cells"] = int((ans.reshape(36) != np.array(t["expected"]).reshape(36)).sum())
+            row["error_type"] = ("execution slip" if t["group_id"] in nb["tied_ids"] and nb["best_cells"] >= 30
+                                 else "other wrong grid")
         if e == "ops":
             ops = parse_ops(r.get("content"))
             row["ops_stated"] = ops if ops is not None else "unparsed"
@@ -273,3 +316,89 @@ def summarize(df) -> Dict[str, "pd.DataFrame"]:
         pd.to_numeric, errors="coerce").sum().to_frame("total").T
     out["usage"] = cost
     return out
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# notebook 47: number-of-demos sweep
+# ---------------------------------------------------------------------------------------------------------------------
+def sweep_paths(out_dir, demo_counts, replicates):
+    return {(r, n): Path(out_dir) / f"rep{r}_demos{n}.jsonl" for r in replicates for n in demo_counts}
+
+
+def score_sweep(base_tasks_by_rep: Dict[int, List[dict]], out_dir, demo_counts, replicates) -> "pd.DataFrame":
+    import pandas as pd
+    parts = []
+    for (r, n), path in sweep_paths(out_dir, demo_counts, replicates).items():
+        if path.exists():
+            d = score(with_demos(base_tasks_by_rep[r], n), path)
+            if len(d):
+                parts.append(d.assign(replicate=r, n_demos=n))
+    return pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
+
+
+def plot_sweep(df, out_dir=None):
+    """Accuracy vs number of demos (mean over transformations; one point per replicate), error types vs demos,
+    and the stated-operations metrics vs demos. Returns the figure paths."""
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({"axes.spines.top": False, "axes.spines.right": False, "font.size": 10})
+    colors = {"answer": "#0072B2", "ops": "#D55E00"}
+    labels = {"answer": "answer only", "ops": "state operations first"}
+    paths = []
+    fig, ax = plt.subplots(figsize=(6.8, 4.2))
+    for e in ("answer", "ops"):
+        q = df[df.experiment == e]
+        if not len(q):
+            continue
+        per_rep = q.groupby(["n_demos", "replicate"]).correct.mean().reset_index()
+        mean = per_rep.groupby("n_demos").correct.mean()
+        ax.plot(mean.index, mean.values, marker="o", lw=2, color=colors[e], label=labels[e])
+        ax.scatter(per_rep.n_demos, per_rep.correct, color=colors[e], s=14, alpha=0.5)
+    ax.set(xlabel="number of demonstrations", ylabel="exact accuracy", ylim=(0, 1.02),
+           xticks=sorted(df.n_demos.unique()))
+    ax.grid(axis="y", color="#e6e6e6", lw=0.8)
+    ax.legend(frameon=False, fontsize=9)
+    ax.set_title("k = 2: accuracy vs demonstrations (line = mean, dots = replicates)", fontsize=9.5)
+    fig.tight_layout()
+    if out_dir:
+        paths.append(Path(out_dir) / "acc_vs_demos.png"); fig.savefig(paths[-1], dpi=150)
+    plt.show()
+    order = ["correct", "execution slip", "wrong transform", "other wrong grid", "unparsed"]
+    cols = {"correct": "#009E73", "execution slip": "#E69F00", "wrong transform": "#D55E00",
+            "other wrong grid": "#7a7a7a", "unparsed": "#cccccc"}
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4), sharey=True)
+    for ax, e in zip(axes, ("answer", "ops")):
+        q = df[df.experiment == e]
+        if not len(q):
+            continue
+        tab = q.groupby("n_demos").error_type.value_counts(normalize=True).unstack(fill_value=0)
+        bottom = np.zeros(len(tab))
+        xs = np.arange(len(tab))
+        for k in order:
+            if k in tab:
+                ax.bar(xs, tab[k].values, bottom=bottom, color=cols[k], label=k, edgecolor="white", lw=1)
+                bottom += tab[k].values
+        ax.set_xticks(xs, tab.index.astype(str))
+        ax.set(xlabel="number of demonstrations", title=labels[e])
+    axes[0].set_ylabel("share of answers")
+    axes[1].legend(frameon=False, fontsize=8, bbox_to_anchor=(1.02, 1), loc="upper left")
+    fig.tight_layout()
+    if out_dir:
+        paths.append(Path(out_dir) / "error_types_vs_demos.png"); fig.savefig(paths[-1], dpi=150)
+    plt.show()
+    o = df[df.experiment == "ops"]
+    if len(o):
+        fig, ax = plt.subplots(figsize=(6.8, 4.2))
+        for c, col, lab in (("ops_equivalent", "#D55E00", "stated operations correct"),
+                            ("correct", "#0072B2", "answer grid correct"),
+                            ("ops_consistent_with_answer", "#7a7a7a", "stated operations match own answer")):
+            m = o.groupby("n_demos")[c].mean()
+            ax.plot(m.index, m.values, marker="o", lw=2, color=col, label=lab)
+        ax.set(xlabel="number of demonstrations", ylabel="share", ylim=(0, 1.02), xticks=sorted(o.n_demos.unique()))
+        ax.grid(axis="y", color="#e6e6e6", lw=0.8)
+        ax.legend(frameon=False, fontsize=9)
+        ax.set_title("'state operations first': inference vs execution", fontsize=9.5)
+        fig.tight_layout()
+        if out_dir:
+            paths.append(Path(out_dir) / "ops_vs_demos.png"); fig.savefig(paths[-1], dpi=150)
+        plt.show()
+    return paths
