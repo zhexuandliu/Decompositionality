@@ -1,5 +1,6 @@
 """Turn an in-context API results file (responses.jsonl / repR_demosN.jsonl) into a readable HTML page.
 
+    python scripts/icl_viewer.py path/to/folder                       # index.html + one page per .jsonl
     python scripts/icl_viewer.py path/to/rep0_demos3.jsonl            # tasks.json is looked up next to it
     python scripts/icl_viewer.py path/to/responses.jsonl --tasks path/to/tasks.json
 
@@ -78,19 +79,13 @@ def grid_html(g, wrong=None, label=""):
     return f'<div class="g"><span class="lab">{html.escape(label)}</span><table class="grid">{"".join(rows)}</table></div>'
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("jsonl")
-    ap.add_argument("--tasks", default=None, help="tasks.json (default: next to the .jsonl)")
-    ap.add_argument("--replicate", type=int, default=None, help="replicate key in tasks.json (sweep files)")
-    ap.add_argument("--no-open", action="store_true")
-    a = ap.parse_args()
-    path = Path(a.jsonl).expanduser()
-    tasks_path = Path(a.tasks).expanduser() if a.tasks else path.parent / "tasks.json"
+def render_file(path: Path, tasks_path: Path = None, replicate: int = None, back_link: str = None):
+    """Write <name>_viewer.html next to ``path``; returns (output path, scored DataFrame)."""
+    tasks_path = tasks_path or path.parent / "tasks.json"
     T = json.loads(tasks_path.read_text())
     m = re.match(r"rep(\d+)_demos(\d+)\.jsonl$", path.name)
     if isinstance(T, dict):                                   # demo sweep: {replicate: [tasks with 10 demos]}
-        rep = a.replicate if a.replicate is not None else (int(m.group(1)) if m else 0)
+        rep = replicate if replicate is not None else (int(m.group(1)) if m else 0)
         tasks = T[str(rep)]
         if m:
             tasks = IA.with_demos(tasks, int(m.group(2)))
@@ -150,7 +145,7 @@ def main():
     page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>ICL Results Viewer</title>
 <style>{CSS}</style></head><body><main>
-<h1>{html.escape(path.name)}</h1>
+{f'<div class="sub"><a href="{back_link}">← all files</a></div>' if back_link else ''}<h1>{html.escape(path.name)}</h1>
 <div class="sub">{len(recs)} calls · accuracy by experiment: {html.escape(json.dumps(acc))} ·
 hidden transformations: A = shift rows right, B = rotate 90° clockwise, C = mirror left–right (left to right)</div>
 <div class="bar">
@@ -165,7 +160,76 @@ hidden transformations: A = shift rows right, B = rotate 90° clockwise, C = mir
 </main><script>{JS}</script></body></html>"""
     out = path.with_name(path.stem + "_viewer.html")
     out.write_text(page)
+    return out, df
+
+
+def render_dir(d: Path) -> Path:
+    """One viewer per .jsonl in ``d`` plus index.html: accuracy by demos x experiment, error types, figures, links."""
+    import pandas as pd
+    files = sorted(d.glob("*.jsonl"), key=lambda p: (p.name.split("_")[0],
+                   int(re.search(r"demos(\d+)", p.name).group(1)) if re.search(r"demos(\d+)", p.name) else 0))
+    parts, rows = [], []
+    for f in files:
+        out, df = render_file(f, back_link="index.html")
+        m = re.match(r"rep(\d+)_demos(\d+)\.jsonl$", f.name)
+        if m and len(df):
+            parts.append(df.assign(replicate=int(m.group(1)), n_demos=int(m.group(2))))
+        acc = df.groupby("experiment").correct.mean().round(3).to_dict() if len(df) else {}
+        rows.append((out.name, f.name, len(df), acc))
+        print("written:", out)
+    exps = [e for e in ("answer", "describe", "ops") if any(e in r[3] for r in rows)]
+    links = [f'<tr><td><a href="{o}">{html.escape(n)}</a></td><td>{c}</td>' + "".join(f"<td>{a.get(e, '')}</td>"
+             for e in exps) + "</tr>" for o, n, c, a in rows]
+    tables = ""
+    if parts:
+        D = pd.concat(parts, ignore_index=True)
+        acc = D.pivot_table(index="n_demos", columns="experiment", values="correct", aggfunc="mean").round(3)
+        err = (D.groupby(["experiment", "n_demos"]).error_type.value_counts(normalize=True)
+               .unstack(fill_value=0).round(3))
+        byw = D.pivot_table(index="word", columns=["experiment", "n_demos"], values="correct", aggfunc="mean").round(2)
+        wt = D[D.error_type == "wrong transform"].groupby(["word", "applied"]).size().rename("count") \
+            .reset_index().sort_values("count", ascending=False).head(15)
+        sty = lambda t: t.to_html(classes="tab", border=0)  # noqa: E731
+        tables = (f"<h2>Accuracy by number of demos</h2>{sty(acc)}<h2>Error types (share of answers)</h2>{sty(err)}"
+                  f"<h2>Accuracy by transformation</h2>{sty(byw)}"
+                  f"<h2>Wrong legal transforms (what was applied instead)</h2>{sty(wt)}")
+        if "rule_keywords" in D:
+            rk = (D[D.experiment == "describe"].groupby(["word", "rule_keywords"]).size().rename("count").reset_index()
+                  .sort_values(["word", "count"], ascending=[True, False]).groupby("word").head(4))
+            tables += f"<h2>Operation words in the stated rule (heuristic), top 4 per transformation</h2>{sty(rk)}"
+    figs = "".join(f'<figure><img src="{p.name}" alt="{p.stem}"><figcaption>{p.stem}</figcaption></figure>'
+                   for p in sorted(d.glob("*.png")))
+    page = f"""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1"><title>ICL Results Index</title>
+<style>{CSS}
+table.tab{{border-collapse:collapse;font-size:13px;margin:6px 0 14px}}table.tab th,table.tab td{{border:1px solid var(--line);
+padding:3px 8px;text-align:right}}table.tab th{{background:var(--card)}}figure{{display:inline-block;margin:6px 10px 6px 0}}
+figure img{{max-width:520px;width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}}
+figcaption{{color:var(--muted);font-size:12px}}h2{{font-size:16px;margin:18px 0 6px}}
+.wrap{{overflow-x:auto}}</style></head><body><main>
+<h1>{html.escape(d.name)}</h1><div class="sub">{len(files)} result files · click a file to browse every call</div>
+<div class="wrap"><table class="tab"><tr><th>file</th><th>calls</th>{''.join(f'<th>{e}</th>' for e in exps)}</tr>
+{''.join(links)}</table></div>
+<div class="wrap">{tables}</div><h2>Figures</h2>{figs}</main></body></html>"""
+    out = d / "index.html"
+    out.write_text(page)
     print("written:", out)
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("path", help="a .jsonl results file, or a folder of them (writes index.html + one page per file)")
+    ap.add_argument("--tasks", default=None, help="tasks.json (default: next to the .jsonl)")
+    ap.add_argument("--replicate", type=int, default=None, help="replicate key in tasks.json (sweep files)")
+    ap.add_argument("--no-open", action="store_true")
+    a = ap.parse_args()
+    path = Path(a.path).expanduser()
+    if path.is_dir():
+        out = render_dir(path)
+    else:
+        out, _ = render_file(path, Path(a.tasks).expanduser() if a.tasks else None, a.replicate)
+        print("written:", out)
     if not a.no_open:
         webbrowser.open(out.resolve().as_uri())
 
