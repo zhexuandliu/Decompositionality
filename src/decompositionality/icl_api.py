@@ -123,10 +123,12 @@ def make_nested_tasks(words=K2_WORDS, n_per_word: int = 20, max_demos: int = 10,
     return tasks
 
 
-def make_tasks_by_length(ks=(1, 3, 4, 5), n_per_k: int = 60, n_demos: int = 3, seed: int = 0) -> List[dict]:
+def make_tasks_by_length(ks=(1, 3, 4, 5), n_per_k: int = 60, n_demos: int = 3, seed: int = 0,
+                         n_per_transform: Optional[int] = None) -> List[dict]:
     """Tasks whose hidden transformation needs EXACTLY k operations: group elements whose shortest A/B/C word has
     length k (so e.g. CCA = A counts as k = 1, never as 3). For each k the elements are shuffled and cycled, so every
-    element appears about n_per_k / (#elements) times. ``word`` is one shortest word; scoring uses ``group_id``.
+    element appears about n_per_k / (#elements) times; with ``n_per_transform`` every element gets exactly that many
+    tasks instead. ``word`` is one shortest word; scoring uses ``group_id``.
     Demos are checked to determine the transformation uniquely; the query has 288 distinct images."""
     from .shortcut_analysis import shortest_words
     G = M.group()
@@ -136,8 +138,9 @@ def make_tasks_by_length(ks=(1, 3, 4, 5), n_per_k: int = 60, n_demos: int = 3, s
         elems = sorted(g for g, w in SW.items() if w != "I" and len(w) == k)
         rng = np.random.default_rng([seed, k, n_demos, 11])
         order = [elems[i] for i in rng.permutation(len(elems))]
+        n_k = n_per_transform * len(elems) if n_per_transform else n_per_k
         j = 0
-        while j < n_per_k:
+        while j < n_k:
             gid = order[j % len(order)]
             p = G.perms[gid]
             xs = [rng.integers(0, 10, (N, N)) for _ in range(n_demos)]
