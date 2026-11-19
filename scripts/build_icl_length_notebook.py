@@ -1,5 +1,6 @@
-"""Generate notebooks/49_icl_api_klen_nohint_gpt6_luna.ipynb: accuracy vs number of operations (k = 1, 3), 20 tasks
-per transformation (as for k = 2 in notebook 48), 3 demonstrations, neutral prompt."""
+"""Generate the in-context "number of operations" notebooks (neutral prompt, 3 demos, 20 tasks per transformation):
+  49_icl_api_klen_nohint_gpt6_luna.ipynb    k = 1, 3
+  50_icl_api_k4_nohint_gpt6_luna.ipynb      k = 4 (report merges k = 1-3 from notebooks 48 / 49)"""
 from __future__ import annotations
 
 import sys
@@ -11,9 +12,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebooks import BOOTSTRAP  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "49_icl_api_klen_nohint_gpt6_luna.ipynb"
+NOTEBOOKS = {49: ("49_icl_api_klen_nohint_gpt6_luna.ipynb", [1, 3], "klen13"),
+             50: ("50_icl_api_k4_nohint_gpt6_luna.ipynb", [4], "klen4")}
 
-INTRO = """# In-context inference vs number of operations (k = 1, 3) — 3 demonstrations, neutral prompt
+INTRO_K13 = """# In-context inference vs number of operations (k = 1, 3) — 3 demonstrations, neutral prompt
 
 The prompt is the same as in notebook 48: **it says nothing about the operations**, only that the same hidden
 transformation is applied in every example. There are two experiments, as before: `answer` (give the grid) and
@@ -35,7 +37,7 @@ Cell 4 = dry run (no cost). Cell 5 = 4-call pilot. Cell 6 = full run (resumable)
 
 CONFIG = r'''# --- 3. Configuration ---------------------------------------------------------------------------------------------
 MODEL = "openai/gpt-6-luna"
-KS = [1, 3]
+KS = __KS__
 N_PER_TRANSFORM = 20             # tasks per transformation (k = 2 in notebook 48 also has 20 per transformation)
 N_DEMOS = 3
 TASK_SEED = 0
@@ -62,7 +64,7 @@ from IPython.display import display
 pd.set_option("display.max_rows", 300); pd.set_option("display.width", 220)
 from decompositionality import icl_api as IA
 _tag = "default" if not REASONING else "_".join(f"{k}{v}" for k, v in REASONING.items())
-OUT_DIR = pathlib.Path(RESULTS_ROOT) / "icl_api" / f"klen13_nohint_{MODEL.replace('/', '_')}_demos{N_DEMOS}_n{N_PER_TRANSFORM}_seed{TASK_SEED}_{_tag}"
+OUT_DIR = pathlib.Path(RESULTS_ROOT) / "icl_api" / f"__TAG___nohint_{MODEL.replace('/', '_')}_demos{N_DEMOS}_n{N_PER_TRANSFORM}_seed{TASK_SEED}_{_tag}"
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 OUT_JSONL = OUT_DIR / "responses.jsonl"
 print("results ->", OUT_DIR)
@@ -74,8 +76,8 @@ tasks = IA.make_tasks_by_length(KS, n_demos=N_DEMOS, seed=TASK_SEED, n_per_trans
 for k in KS:
     tk = [t for t in tasks if t["k"] == k]
     print(f"k = {k}: {len(tk)} tasks, {len({t['word'] for t in tk})} distinct transformations")
-print("\nExample prompt (k = 3, experiment 'describe'):\n")
-print(IA.build_prompt([t for t in tasks if t["k"] == 3][0], "describe", HINT))
+print(f"\nExample prompt (k = {KS[-1]}, experiment 'describe'):\n")
+print(IA.build_prompt([t for t in tasks if t["k"] == KS[-1]][0], "describe", HINT))
 print("\ncalls planned:", len(tasks) * len(EXPERIMENTS))
 '''
 
@@ -93,6 +95,13 @@ IA.run(tasks, OUT_JSONL, MODEL, experiments=EXPERIMENTS, hint=HINT, reasoning=RE
 
 REPORT = r'''# --- 7. Tables and plot --------------------------------------------------------------------------------------------------
 df = IA.score(tasks, OUT_JSONL)
+# k = 1, 3 from notebook 49 (if this is another notebook and that folder exists)
+for _other in sorted((pathlib.Path(RESULTS_ROOT) / "icl_api").glob(f"klen*_nohint_{MODEL.replace('/', '_')}_demos{N_DEMOS}_n{N_PER_TRANSFORM}_seed{TASK_SEED}_{_tag}")):
+    if _other != OUT_DIR and (_other / "responses.jsonl").exists():
+        _o = IA.score(json.loads((_other / "tasks.json").read_text()), _other / "responses.jsonl")
+        _o = _o[~_o.k.isin(df.k.unique())]
+        df = pd.concat([df, _o], ignore_index=True)
+        print(f"added {len(_o)} calls (k = {sorted(_o.k.unique())}) from {_other.name}")
 # k = 2 (3 demos) from notebook 48, if available
 k2_dir = pathlib.Path(RESULTS_ROOT) / "icl_api" / f"k2_demo_sweep_nohint_{MODEL.replace('/', '_')}_{_tag}"
 if (k2_dir / "tasks.json").exists():
@@ -139,14 +148,30 @@ if IN_COLAB:
 '''
 
 
-def build() -> Path:
-    p = ROOT / "notebooks" / NAME
+INTRO_K4 = """# In-context inference with k = 4 operations — 3 demonstrations, neutral prompt
+
+Same setup as notebook 49 (prompt says nothing about the operations; experiments `answer` and `describe`;
+3 demonstrations; 20 tasks per transformation), now for **all 32 transformations that need exactly 4 operations**
+(shortest A/B/C word of length 4). 32 × 20 = 640 tasks × 2 experiments = **1,280 calls** (~$1–2).
+
+The report merges k = 1, 3 (notebook 49) and k = 2 (notebook 48) when those folders are on Drive, so the table and
+the plot cover k = 1-4.
+
+Cell 4 = dry run (no cost). Cell 5 = 4-call pilot. Cell 6 = full run (resumable). Cell 7 = tables, plot and zip.
+"""
+
+
+def build(number: int) -> Path:
+    name, ks, tag = NOTEBOOKS[number]
+    p = ROOT / "notebooks" / name
     if p.exists() and any(c.get("outputs") for c in nbf.read(p, as_version=4).cells if c.cell_type == "code"):
         raise SystemExit(f"{p.name} contains saved outputs; refusing to overwrite it")
+    intro = INTRO_K13 if number == 49 else INTRO_K4
+    cfg = CONFIG.replace("__KS__", repr(ks)).replace("__TAG__", tag)
     nb = nbf.v4.new_notebook()
     nb.metadata = {"colab": {"provenance": []}, "kernelspec": {"display_name": "Python 3", "language": "python",
                                                               "name": "python3"}, "language_info": {"name": "python"}}
-    nb.cells = [nbf.v4.new_markdown_cell(INTRO), nbf.v4.new_code_cell(BOOTSTRAP), nbf.v4.new_code_cell(CONFIG),
+    nb.cells = [nbf.v4.new_markdown_cell(intro), nbf.v4.new_code_cell(BOOTSTRAP), nbf.v4.new_code_cell(cfg),
                 nbf.v4.new_code_cell(DRY), nbf.v4.new_code_cell(PILOT), nbf.v4.new_code_cell(FULL),
                 nbf.v4.new_code_cell(REPORT)]
     nbf.validate(nb)
@@ -155,4 +180,5 @@ def build() -> Path:
 
 
 if __name__ == "__main__":
-    print(build())
+    for nb in (sys.argv[1:] or ["50"]):
+        print(build(int(nb)))
