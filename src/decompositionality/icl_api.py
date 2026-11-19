@@ -157,6 +157,65 @@ def make_tasks_by_length(ks=(1, 3, 4, 5), n_per_k: int = 60, n_demos: int = 3, s
     return tasks
 
 
+# ---------------------------------------------------------------------------------------------------------------------
+# notebook 51: composition in context (rules shown separately, asked for their composition)
+# ---------------------------------------------------------------------------------------------------------------------
+COMPOSE_CONDITIONS = ("compose", "direct")
+
+
+def make_compose_tasks(pairs=K2_WORDS, n_per_pair: int = 10, n_demos: int = 3, seed: int = 0) -> List[dict]:
+    """Each task: Rule P = the first operation of the pair, Rule Q = the second, each shown with ``n_demos`` examples
+    that determine it uniquely among the 288 transformations; a "direct" set of ``n_demos`` examples of the composite
+    (P then Q), also unique; and one query grid with 288 distinct images. Expected answer = P then Q on the query."""
+    G = M.group()
+    tasks = []
+
+    def demos(rng, perm):
+        while True:
+            xs = [rng.integers(0, 10, (N, N)) for _ in range(n_demos)]
+            ys = [x.reshape(36)[perm].reshape(N, N) for x in xs]
+            if len(_consistent(G, xs, ys)) == 1:
+                return [x.tolist() for x in xs], [y.tolist() for y in ys]
+
+    for wi, w in enumerate(pairs):
+        assert len(w) == 2 and G.word_id(w) not in (G.word_id(w[0]), G.word_id(w[1]), G.word_id(w[::-1]), G.I), w
+        rng = np.random.default_rng([seed, wi, n_demos, 51])
+        for j in range(n_per_pair):
+            pin, pout = demos(rng, M.word_perm(w[0]))
+            qin, qout = demos(rng, M.word_perm(w[1]))
+            din, dout = demos(rng, M.word_perm(w))
+            while True:
+                q = rng.integers(0, 10, (N, N))
+                if len({q.reshape(36)[G.perms[i]].tobytes() for i in range(G.size)}) == G.size:
+                    break
+            tasks.append({"task_id": f"{w}-{j:03d}", "word": w, "group_id": int(G.word_id(w)),
+                          "rule_p_inputs": pin, "rule_p_outputs": pout, "rule_q_inputs": qin, "rule_q_outputs": qout,
+                          "demo_inputs": din, "demo_outputs": dout, "query": q.tolist(),
+                          "expected": q.reshape(36)[M.word_perm(w)].reshape(N, N).tolist()})
+    return tasks
+
+
+def _examples(xs, ys):
+    return "\n\n".join(f"Example {i + 1}\nInput:\n{_fmt(x)}\nOutput:\n{_fmt(y)}" for i, (x, y) in enumerate(zip(xs, ys)))
+
+
+def build_compose_prompt(task: dict, condition: str) -> str:
+    """Neutral prompts: nothing about which operations exist.
+    compose: Rule P and Rule Q shown separately; asked for "Rule P, then Rule Q" (never shown together).
+    direct:  examples of the composite transformation itself (the holistic baseline)."""
+    tail = "Give your answer as " + GRID_FORMAT
+    if condition == "compose":
+        return ("Below are examples of two hidden transformations, Rule P and Rule Q. Each example shows a 6x6 grid of "
+                "digits (Input) and the grid obtained by applying that rule to it (Output).\n\n"
+                f"Rule P\n\n{_examples(task['rule_p_inputs'], task['rule_p_outputs'])}\n\n"
+                f"Rule Q\n\n{_examples(task['rule_q_inputs'], task['rule_q_outputs'])}\n\n"
+                f"Apply Rule P and then Rule Q to this grid:\n{_fmt(task['query'])}\n\n{tail}")
+    if condition == "direct":
+        return (f"{HEADER_NEUTRAL}\n\n{_examples(task['demo_inputs'], task['demo_outputs'])}\n\n"
+                f"Apply the same transformation to this grid:\n{_fmt(task['query'])}\n\n{tail}")
+    raise ValueError(condition)
+
+
 def with_demos(tasks: List[dict], n: int) -> List[dict]:
     """The same tasks restricted to their first n demos."""
     return [{**t, "demo_inputs": t["demo_inputs"][:n], "demo_outputs": t["demo_outputs"][:n]} for t in tasks]
@@ -238,7 +297,7 @@ def run(tasks: List[dict], out_jsonl, model: str, experiments=EXPERIMENTS, *, hi
     n_ok = 0
 
     def one(t, e):
-        prompt = build_prompt(t, e, hint)
+        prompt = build_compose_prompt(t, e) if "rule_p_inputs" in t else build_prompt(t, e, hint)
         t0 = time.time()
         res = call(prompt, model, reasoning=reasoning, max_tokens=max_tokens)
         return {"task_id": t["task_id"], "word": t["word"], "experiment": e, "hint": hint, "model_requested": model,
@@ -343,6 +402,12 @@ def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
         if ans is not None:
             applied = [i for i in range(G.size) if np.array_equal(q[G.perms[i]], ans.reshape(36))]
         row["applied"] = SW[applied[0]] if applied else ("unparsed" if ans is None else "not a legal transform")
+        if "rule_p_inputs" in t and applied:          # composition tasks: what did the model apply instead?
+            s_ = set(applied)
+            p_, q_ = t["word"][0], t["word"][1]
+            row["applied_is_p_only"] = G.word_id(p_) in s_
+            row["applied_is_q_only"] = G.word_id(q_) in s_
+            row["applied_is_reversed"] = G.word_id(q_ + p_) in s_
         # error type: correct / wrong legal transform (misidentified) / execution slip (the nearest legal transform is
         # the true one and >= 30 of 36 cells agree) / other wrong grid / unparsed
         if ans is None:

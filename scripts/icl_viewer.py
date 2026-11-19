@@ -103,10 +103,14 @@ def render_file(path: Path, tasks_path: Path = None, replicate: int = None, back
         s = scored.get((r["task_id"], r["experiment"]))
         exp = np.array(t["expected"]).reshape(6, 6)
         ans = IA.parse_answer(r.get("content"))
-        demos = "".join(
-            f'<div class="pair">{grid_html(x, label=f"demo {i + 1} input")}<span class="arrow">→</span>'
-            f'{grid_html(y, label="output")}</div>'
-            for i, (x, y) in enumerate(zip(t["demo_inputs"], t["demo_outputs"])))
+        def _pairs(xs, ys, name):
+            return "".join(f'<div class="pair">{grid_html(x, label=f"{name} {i + 1} input")}<span class="arrow">→</span>'
+                           f'{grid_html(y, label="output")}</div>' for i, (x, y) in enumerate(zip(xs, ys)))
+        if r["experiment"] == "compose" and "rule_p_inputs" in t:
+            demos = (_pairs(t["rule_p_inputs"], t["rule_p_outputs"], "Rule P") + '<div class="sep"></div>'
+                     + _pairs(t["rule_q_inputs"], t["rule_q_outputs"], "Rule Q"))
+        else:
+            demos = _pairs(t["demo_inputs"], t["demo_outputs"], "demo")
         answer = (grid_html(ans, wrong=(ans != exp), label="model answer (wrong cells red)") if ans is not None
                   else '<div class="g"><span class="lab">model answer</span><em>could not parse</em></div>')
         ok = bool(s and s.correct)
@@ -149,7 +153,7 @@ def render_file(path: Path, tasks_path: Path = None, replicate: int = None, back
 <div class="sub">{len(recs)} calls · accuracy by experiment: {html.escape(json.dumps(acc))} ·
 hidden transformations: A = shift rows right, B = rotate 90° clockwise, C = mirror left–right (left to right)</div>
 <div class="bar">
- <select id="fexp"><option value="">all experiments</option><option>answer</option><option>ops</option><option>describe</option></select>
+ <select id="fexp"><option value="">all experiments</option><option>answer</option><option>ops</option><option>describe</option><option>compose</option><option>direct</option></select>
  <select id="fres"><option value="">correct + wrong</option><option>correct</option><option>wrong</option></select>
  <select id="ferr"><option value="">all error types</option>{''.join(f'<option>{html.escape(e)}</option>' for e in errs)}</select>
  <select id="fword"><option value="">all transformations</option>{''.join(f'<option>{w}</option>' for w in words)}</select>
