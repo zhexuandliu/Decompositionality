@@ -52,11 +52,11 @@ HEADER = (
     "(B) rotate the grid 90 degrees clockwise;\n"
     "(C) mirror the grid left-to-right."
 )
-# STEPS header (notebook 52): says the transformation is a sequence of simple geometric operations that only move
-# digits, without saying which operations, how many, or naming any of them.
+# STEPS header (notebook 52): says the transformation is a sequence of rigid transformations of a wrap-around grid,
+# without saying which ones, how many, or naming any of them.
 HEADER_STEPS = (
-    HEADER_NEUTRAL + " The hidden transformation is a sequence of one or more simple geometric operations on the grid. "
-    "Each operation only moves digits to other cells; no digit is ever changed."
+    HEADER_NEUTRAL + " The hidden transformation is a sequence of one or more rigid transformations (distance-preserving "
+    "maps) of the grid, where the grid wraps around at its edges."
 )
 EXPERIMENTS_STEPS = ("answer", "steps")
 GRID_FORMAT = "a 6x6 grid of digits in the same format (6 lines of 6 space-separated digits), between <answer> and </answer>."
@@ -64,9 +64,8 @@ INSTRUCTION = {
     "answer": "Give your answer as " + GRID_FORMAT,
     "describe": ("First, describe the transformation in words, between <rule> and </rule>.\n"
                  "Then give your answer as " + GRID_FORMAT),
-    "steps": ("First, break the transformation down into its sequence of simple operations. For each operation, in "
-              "order, give a short description between <step> and </step>, followed by the grid obtained after applying "
-              "all operations so far to the grid above, between <grid> and </grid>.\n"
+    "steps": ("First, break the transformation down into the simplest steps it is made of. Describe each step, in "
+              "order, between <step> and </step>.\n"
               "Then give your final answer as " + GRID_FORMAT),
     "ops": ("First, state the transformation as a sequence of these operations, between <ops> and </ops>.\n"
             "Then give your answer as " + GRID_FORMAT),
@@ -459,6 +458,8 @@ def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
         if e == "steps":
             st = parse_steps(r.get("content"))
             row["n_steps"] = len(st)
+            row["steps_text"] = " | ".join(d for d, _ in st)
+        if e == "steps" and any(g is not None for _, g in st):      # only if the model also wrote intermediate grids
             prev, words, legal = q, [], True
             for _, g in st:                       # what each step does to the grid produced by the previous step
                 ids = [] if g is None else [i for i in range(G.size) if np.array_equal(prev[G.perms[i]], g.reshape(36))]
@@ -476,7 +477,6 @@ def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
             row["steps_reach_answer"] = bool(st) and ans is not None and np.array_equal(prev, ans.reshape(36))
             row["steps_correct_chain"] = bool(row["steps_all_legal"] and
                                               np.array_equal(prev, np.array(t["expected"]).reshape(36)))
-            row["steps_text"] = " | ".join(d for d, _ in st)
         if e == "describe":
             rule = parse_rule(r.get("content"))
             row["rule"] = rule if rule is not None else "unparsed"

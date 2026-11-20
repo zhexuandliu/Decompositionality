@@ -1,5 +1,5 @@
-"""Generate notebooks/52_icl_api_k2_steps_models.ipynb: two-operation rules, prompt says "sequence of simple geometric
-operations", the model writes each step with its grid; three models."""
+"""Generate notebooks/52_icl_api_k2_steps_models.ipynb: two-operation rules, "sequence of rigid transformations" prompt,
+1/3/5/7/9 nested examples, answer vs. steps, three models."""
 from __future__ import annotations
 
 import sys
@@ -13,41 +13,40 @@ from build_notebooks import BOOTSTRAP  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "52_icl_api_k2_steps_models.ipynb"
 
-INTRO = """# Two-operation rules, "sequence of simple geometric operations" prompt — three models
+INTRO = """# Two-operation rules, "sequence of rigid transformations" prompt — 3 models × 1/3/5/7/9 examples
 
-**What changes from notebooks 48-50.** The header now also says:
+**Prompt header** (notebooks 48-50 header plus one sentence):
 
-> The hidden transformation is a sequence of one or more simple geometric operations on the grid. Each operation
-> only moves digits to other cells; no digit is ever changed.
+> Each example below shows a 6x6 grid of digits (Input) and the grid obtained by applying the same hidden
+> transformation to it (Output). The transformation is the same for every example. The hidden transformation is a
+> sequence of one or more rigid transformations (distance-preserving maps) of the grid, where the grid wraps around
+> at its edges.
 
-It does **not** say which operations, how many, or name any of them.
+No operation is named, and the number of steps is not given.
 
 **Two experiments per task:**
 * `answer`: give the transformed grid only.
-* `steps`: break the transformation into its sequence of simple operations. For each step, give a short description
-  (`<step>`) and the grid after all steps so far (`<grid>`), then the final answer.
-
-Because every intermediate grid is given, each step can be checked exactly: we find which of the 288
-transformations maps the previous grid to this one. This tells us how many steps the model uses, whether each step is
-a legal transformation, and whether its decomposition matches ours (e.g. `A | B` for AB).
+* `steps`: "break the transformation down into the simplest steps it is made of", one `<step>` per step, then the
+  final grid. No intermediate grids are requested.
 
 **Tasks.** The 6 two-operation rules AB, AC, BA, BC, CA, CB (A = shift rows right, B = rotate 90° clockwise,
-C = mirror left-right); 20 tasks each, 3 examples; the same tasks for every model.
+C = mirror left-right); 20 tasks each. Examples are **nested**: each task has 9 examples, and the run with n examples
+uses the first n, with the same query grid. The first example alone already determines the rule uniquely.
 
-**Models:** `openai/gpt-6-luna`, `openai/gpt-6.2-astra`, `meta/muse-glimmer-30b` (provider-default reasoning).
-**Size:** 120 tasks × 2 experiments × 3 models = **720 calls**.
+**Models:** `openai/gpt-6-luna`, `openai/gpt-6.2-astra`, `meta/muse-glimmer-30b` (each with its default reasoning).
+**Size:** 120 tasks × 5 example counts × 2 experiments × 3 models = **3,600 calls**.
 
-Cell 4 = dry run (no cost). Cell 5 = pilot: 2 calls per model (checks the model IDs). Cell 6 = full run (resumable).
-Cell 7 = tables and zip.
+Cell 4 = dry run (no cost). Cell 5 = pilot: 2 calls per model (checks model IDs and output format).
+Cell 6 = full run (resumable). Cell 7 = tables, figure and zip.
 """
 
 CONFIG = r'''# --- 3. Configuration ---------------------------------------------------------------------------------------------
 MODELS = ["openai/gpt-6-luna", "openai/gpt-6.2-astra", "meta/muse-glimmer-30b"]
+DEMO_COUNTS = [1, 3, 5, 7, 9]
 N_PER_WORD = 20
-N_DEMOS = 3
 TASK_SEED = 0
 EXPERIMENTS = ["answer", "steps"]
-STYLE = "steps"
+STYLE = "steps"                  # header: sequence of rigid transformations, wrap-around grid
 REASONING = None                 # None = each model's default
 MAX_TOKENS = None
 WORKERS = 32
@@ -64,61 +63,70 @@ if IN_COLAB and not os.environ.get("OPENROUTER_API_KEY"):
 print("OpenRouter key present:", bool(os.environ.get("OPENROUTER_API_KEY")))
 import json, pathlib
 import pandas as pd
+import matplotlib.pyplot as plt
 from IPython.display import display
-pd.set_option("display.max_rows", 300); pd.set_option("display.width", 220); pd.set_option("display.max_colwidth", 200)
+pd.set_option("display.max_rows", 300); pd.set_option("display.width", 220); pd.set_option("display.max_colwidth", 250)
 from decompositionality import icl_api as IA
 _tag = "default" if not REASONING else "_".join(f"{k}{v}" for k, v in REASONING.items())
-OUT_ROOT = pathlib.Path(RESULTS_ROOT) / "icl_api" / f"k2_steps_demos{N_DEMOS}_n{N_PER_WORD}_seed{TASK_SEED}_{_tag}"
+OUT_ROOT = pathlib.Path(RESULTS_ROOT) / "icl_api" / f"k2_rigid_steps_n{N_PER_WORD}_seed{TASK_SEED}_{_tag}"
 OUT_ROOT.mkdir(parents=True, exist_ok=True)
-out = {m: OUT_ROOT / f"{m.replace('/', '_')}.jsonl" for m in MODELS}
+path = lambda m, n: OUT_ROOT / m.replace("/", "_") / f"demos{n}.jsonl"
 print("results ->", OUT_ROOT)
 '''
 
 DRY = r'''# --- 4. Dry run: build the tasks and show both prompts (no API calls) -----------------------------------------------
-tasks = IA.make_tasks(IA.K2_WORDS, n_per_word=N_PER_WORD, n_demos=N_DEMOS, seed=TASK_SEED)
+tasks = IA.make_nested_tasks(IA.K2_WORDS, n_per_word=N_PER_WORD, max_demos=max(DEMO_COUNTS), seed=TASK_SEED)
 (OUT_ROOT / "tasks.json").write_text(json.dumps(tasks))
 print(len(tasks), "tasks")
 for e in EXPERIMENTS:
-    print(f"\n==================== experiment '{e}' (task {tasks[0]['task_id']}) ====================")
-    print(IA.build_prompt(tasks[0], e, hint=False, style=STYLE))
-print("\ncalls planned:", len(tasks) * len(EXPERIMENTS) * len(MODELS))
+    print(f"\n==================== experiment '{e}' (task {tasks[0]['task_id']}, 1 example) ====================")
+    print(IA.build_prompt(IA.with_demos(tasks, 1)[0], e, hint=False, style=STYLE))
+print("\ncalls planned:", len(tasks) * len(DEMO_COUNTS) * len(EXPERIMENTS) * len(MODELS))
 '''
 
-PILOT = r'''# --- 5. Pilot: 2 calls per model ----------------------------------------------------------------------------------------
+PILOT = r'''# --- 5. Pilot: 2 calls per model (3 examples) ------------------------------------------------------------------------
 for m in MODELS:
-    IA.run(tasks[:1], out[m], m, experiments=EXPERIMENTS, hint=False, style=STYLE, reasoning=REASONING,
-           max_tokens=MAX_TOKENS, workers=WORKERS)
-    for line in out[m].read_text().splitlines()[-2:]:
+    IA.run(IA.with_demos(tasks, 3)[:1], path(m, 3), m, experiments=EXPERIMENTS, hint=False, style=STYLE,
+           reasoning=REASONING, max_tokens=MAX_TOKENS, workers=WORKERS)
+    for line in path(m, 3).read_text().splitlines()[-2:]:
         r = json.loads(line)
-        print(f"--- {m} / {r['experiment']}  error={r['error']}\n{(r['content'] or '')[:1200]}\n")
+        print(f"--- {m} / {r['experiment']}  error={r['error']}\n{(r['content'] or '')[:1500]}\n")
 '''
 
 FULL = r'''# --- 6. Full run (resumable: calls already saved are skipped) --------------------------------------------------------
 for m in MODELS:
-    IA.run(tasks, out[m], m, experiments=EXPERIMENTS, hint=False, style=STYLE, reasoning=REASONING,
-           max_tokens=MAX_TOKENS, workers=WORKERS)
+    for n in DEMO_COUNTS:
+        print(f"=== {m}, {n} examples")
+        IA.run(IA.with_demos(tasks, n), path(m, n), m, experiments=EXPERIMENTS, hint=False, style=STYLE,
+               reasoning=REASONING, max_tokens=MAX_TOKENS, workers=WORKERS)
 '''
 
-REPORT = r'''# --- 7. Tables ---------------------------------------------------------------------------------------------------------
-df = pd.concat([IA.score(tasks, out[m]).assign(model=m) for m in MODELS if out[m].exists()], ignore_index=True)
-acc = df.pivot_table(index="word", columns=["model", "experiment"], values="correct", aggfunc="mean")
-acc.loc["ALL"] = df.groupby(["model", "experiment"]).correct.mean()
-print("Accuracy:"); display(acc.round(2))
-print("\nError types:"); display(df.groupby(["model", "experiment"]).error_type.value_counts(normalize=True).unstack(fill_value=0).round(3))
-s = df[df.experiment == "steps"].copy()
-s["ours"] = s.step_words == s.word.map(lambda w: " | ".join(w))
-print("\nSteps: how the model decomposes (fraction of tasks)")
-display(s.groupby("model").agg(n=("task_id", "size"), correct=("correct", "mean"),
-                               mean_steps=("n_steps", "mean"), all_steps_legal=("steps_all_legal", "mean"),
-                               chain_correct=("steps_correct_chain", "mean"), same_as_ours=("ours", "mean")).round(2))
-print("\nNumber of steps:"); display(pd.crosstab(s.model, s.n_steps))
-print("\nMost common decompositions per rule (step words: what each step does, as a shortest A/B/C word; ? = not a legal transformation)")
-display(s.groupby(["model", "word", "step_words"]).size().rename("count").reset_index()
-         .sort_values(["model", "word", "count"], ascending=[True, True, False]).groupby(["model", "word"]).head(3))
-print("\nExample step descriptions:")
-display(s.groupby(["model", "word"]).head(1)[["model", "word", "correct", "step_words", "steps_text"]])
-print("\nUsage:"); display(df[["prompt_tokens", "completion_tokens", "reasoning_tokens", "cost_usd"]]
-                           .apply(pd.to_numeric, errors="coerce").groupby([df.model, df.experiment]).mean().round(4))
+REPORT = r'''# --- 7. Tables and figure --------------------------------------------------------------------------------------------
+df = pd.concat([IA.score(IA.with_demos(tasks, n), path(m, n)).assign(model=m, n_demos=n)
+                for m in MODELS for n in DEMO_COUNTS if path(m, n).exists()], ignore_index=True)
+print("Accuracy by model, experiment and number of examples:")
+display(df.pivot_table(index="n_demos", columns=["model", "experiment"], values="correct").round(3))
+print("\nAccuracy by rule (all example counts):")
+display(df.pivot_table(index="word", columns=["model", "experiment"], values="correct").round(2))
+fig, axes = plt.subplots(1, 2, figsize=(11, 3.8), sharey=True)
+for ax, e in zip(axes, EXPERIMENTS):
+    for m in MODELS:
+        q = df[(df.model == m) & (df.experiment == e)].groupby("n_demos").correct.mean()
+        ax.plot(q.index, q.values, marker="o", lw=2, label=m)
+    ax.set(title=e, xlabel="number of examples", xticks=DEMO_COUNTS, ylim=(0, 1.02)); ax.grid(alpha=.3)
+axes[0].set_ylabel("accuracy"); axes[1].legend(frameon=False, fontsize=8)
+fig.tight_layout(); fig.savefig(OUT_ROOT / "accuracy.png", dpi=150); plt.show()
+print("\nError types:")
+display(df.groupby(["model", "experiment"]).error_type.value_counts(normalize=True).unstack(fill_value=0).round(3))
+s = df[df.experiment == "steps"]
+print("\nNumber of steps the model writes (rows: model, columns: number of steps):")
+display(pd.crosstab([s.model, s.word], s.n_steps))
+print("\nExample decompositions (3 examples, first 2 tasks per rule):")
+display(s[s.n_demos == 3].groupby(["model", "word"]).head(2)[["model", "word", "correct", "n_steps", "steps_text"]])
+print("\nUsage per call:")
+display(df[["prompt_tokens", "completion_tokens", "reasoning_tokens", "cost_usd"]].apply(pd.to_numeric, errors="coerce")
+        .groupby([df.model, df.experiment]).mean().round(4))
+print("total cost by model ($):", df.assign(c=pd.to_numeric(df.cost_usd, errors="coerce")).groupby("model").c.sum().round(2).to_dict())
 df.to_csv(OUT_ROOT / "scores.csv", index=False)
 print("saved to", OUT_ROOT)
 if IN_COLAB:
