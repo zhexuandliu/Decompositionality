@@ -33,15 +33,16 @@ No operation is named, and the number of steps is not given.
 C = mirror left-right); 20 tasks each. Examples are **nested**: each task has 9 examples, and the run with n examples
 uses the first n, with the same query grid. The first example alone already determines the rule uniquely.
 
-**Models:** `openai/gpt-6-luna`, `openai/gpt-6.2-astra`, `meta/muse-glimmer-30b` (each with its default reasoning).
-**Size:** 120 tasks × 5 example counts × 2 experiments × 3 models = **3,600 calls**.
+**Models:** `openai/gpt-6-luna`, `meta/muse-glimmer-30b` (each with its default reasoning). `openai/gpt-6.2-astra` is
+left out for now because of its price; add it to `MODELS` to run it on the same tasks later.
+**Size:** 120 tasks × 5 example counts × 2 experiments × 2 models = **2,400 calls** (about $5-6).
 
 Cell 4 = dry run (no cost). Cell 5 = pilot: 2 calls per model (checks model IDs and output format).
 Cell 6 = full run (resumable). Cell 7 = tables, figure and zip.
 """
 
 CONFIG = r'''# --- 3. Configuration ---------------------------------------------------------------------------------------------
-MODELS = ["openai/gpt-6-luna", "openai/gpt-6.2-astra", "meta/muse-glimmer-30b"]
+MODELS = ["openai/gpt-6-luna", "meta/muse-glimmer-30b"]     # "openai/gpt-6.2-astra" left out for now (cost)
 DEMO_COUNTS = [1, 3, 5, 7, 9]
 N_PER_WORD = 20
 TASK_SEED = 0
@@ -90,7 +91,9 @@ for m in MODELS:
            reasoning=REASONING, max_tokens=MAX_TOKENS, workers=WORKERS)
     for line in path(m, 3).read_text().splitlines()[-2:]:
         r = json.loads(line)
-        print(f"--- {m} / {r['experiment']}  error={r['error']}\n{(r['content'] or '')[:1500]}\n")
+        u = r.get("usage") or {}
+        print(f"--- {m} / {r['experiment']}  error={r['error']}  prompt_tokens={u.get('prompt_tokens')}  "
+              f"completion_tokens={u.get('completion_tokens')}  cost=${u.get('cost')}\n{(r['content'] or '')[:1500]}\n")
 '''
 
 FULL = r'''# --- 6. Full run (resumable: calls already saved are skipped) --------------------------------------------------------
