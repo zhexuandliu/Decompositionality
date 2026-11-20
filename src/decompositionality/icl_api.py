@@ -52,11 +52,22 @@ HEADER = (
     "(B) rotate the grid 90 degrees clockwise;\n"
     "(C) mirror the grid left-to-right."
 )
+# STEPS header (notebook 52): says the transformation is a sequence of simple geometric operations that only move
+# digits, without saying which operations, how many, or naming any of them.
+HEADER_STEPS = (
+    HEADER_NEUTRAL + " The hidden transformation is a sequence of one or more simple geometric operations on the grid. "
+    "Each operation only moves digits to other cells; no digit is ever changed."
+)
+EXPERIMENTS_STEPS = ("answer", "steps")
 GRID_FORMAT = "a 6x6 grid of digits in the same format (6 lines of 6 space-separated digits), between <answer> and </answer>."
 INSTRUCTION = {
     "answer": "Give your answer as " + GRID_FORMAT,
     "describe": ("First, describe the transformation in words, between <rule> and </rule>.\n"
                  "Then give your answer as " + GRID_FORMAT),
+    "steps": ("First, break the transformation down into its sequence of simple operations. For each operation, in "
+              "order, give a short description between <step> and </step>, followed by the grid obtained after applying "
+              "all operations so far to the grid above, between <grid> and </grid>.\n"
+              "Then give your final answer as " + GRID_FORMAT),
     "ops": ("First, state the transformation as a sequence of these operations, between <ops> and </ops>.\n"
             "Then give your answer as " + GRID_FORMAT),
 }
@@ -221,12 +232,16 @@ def with_demos(tasks: List[dict], n: int) -> List[dict]:
     return [{**t, "demo_inputs": t["demo_inputs"][:n], "demo_outputs": t["demo_outputs"][:n]} for t in tasks]
 
 
-def build_prompt(task: dict, experiment: str, hint: bool) -> str:
+def build_prompt(task: dict, experiment: str, hint: bool, style: Optional[str] = None) -> str:
     """``hint`` must be given explicitly: False = neutral prompt (no information about the operations);
-    True = the notebook-46/47 prompt that lists operations A, B, C ("ops" experiment only with the hint)."""
+    True = the notebook-46/47 prompt that lists operations A, B, C ("ops" experiment only with the hint).
+    ``style="steps"`` (with hint=False): the header also says the transformation is a sequence of simple geometric
+    operations that only move digits (notebook 52), without naming any operation."""
     if experiment == "ops" and not hint:
         raise ValueError("the 'ops' experiment names operations A/B/C and needs hint=True; use 'describe'")
-    header = HEADER if hint else HEADER_NEUTRAL
+    if style == "steps" and hint:
+        raise ValueError("style='steps' is used without the operation hint")
+    header = HEADER if hint else (HEADER_STEPS if style == "steps" else HEADER_NEUTRAL)
     demos = "\n\n".join(f"Example {i + 1}\nInput:\n{_fmt(x)}\nOutput:\n{_fmt(y)}"
                         for i, (x, y) in enumerate(zip(task["demo_inputs"], task["demo_outputs"])))
     return (f"{header}\n\n{demos}\n\nApply the same transformation to this grid:\n{_fmt(task['query'])}\n\n"
@@ -276,7 +291,7 @@ def call_openrouter(prompt: str, model: str, reasoning: Optional[dict] = None, m
 
 def run(tasks: List[dict], out_jsonl, model: str, experiments=EXPERIMENTS, *, hint: bool, reasoning: Optional[dict] = None,
         max_tokens: Optional[int] = None, workers: int = 4, limit: Optional[int] = None,
-        call: Callable = call_openrouter, log=print) -> int:
+        call: Callable = call_openrouter, log=print, style: Optional[str] = None) -> int:
     """Calls the model for every (task, experiment) not yet in ``out_jsonl``; appends one JSON line per call.
     ``limit`` caps the number of NEW calls (pilot). Returns the number of new calls made."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -297,10 +312,10 @@ def run(tasks: List[dict], out_jsonl, model: str, experiments=EXPERIMENTS, *, hi
     n_ok = 0
 
     def one(t, e):
-        prompt = build_compose_prompt(t, e) if "rule_p_inputs" in t else build_prompt(t, e, hint)
+        prompt = build_compose_prompt(t, e) if "rule_p_inputs" in t else build_prompt(t, e, hint, style)
         t0 = time.time()
         res = call(prompt, model, reasoning=reasoning, max_tokens=max_tokens)
-        return {"task_id": t["task_id"], "word": t["word"], "experiment": e, "hint": hint, "model_requested": model,
+        return {"task_id": t["task_id"], "word": t["word"], "experiment": e, "hint": hint, "model_requested": model, "style": style,
                 "reasoning_setting": reasoning, "seconds": round(time.time() - t0, 1), **res}
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
@@ -327,6 +342,18 @@ def parse_answer(text: Optional[str]) -> Optional[np.ndarray]:
         return None
     digits = re.findall(r"\d", m[-1])
     return np.array([int(d) for d in digits]).reshape(N, N) if len(digits) == 36 else None
+
+
+def parse_steps(text: Optional[str]) -> List[tuple]:
+    """[(description, 6x6 grid or None), ...] from <step>...</step> <grid>...</grid> pairs, in order (before <answer>)."""
+    if not text:
+        return []
+    body = text.split("<answer>")[0]
+    out = []
+    for m in re.finditer(r"<step>(.*?)</step>\s*(?:<grid>(.*?)</grid>)?", body, re.S):
+        digits = re.findall(r"\d", m.group(2) or "")
+        out.append((m.group(1).strip(), np.array([int(d) for d in digits]).reshape(N, N) if len(digits) == 36 else None))
+    return out
 
 
 def parse_ops(text: Optional[str]) -> Optional[str]:
@@ -429,6 +456,27 @@ def score(tasks: List[dict], out_jsonl) -> "pd.DataFrame":
             row["ops_literal"] = bool(ok and ops == t["word"])
             row["ops_consistent_with_answer"] = bool(ok and ans is not None and
                                                      np.array_equal(q[M.word_perm(ops)], ans.reshape(36)))
+        if e == "steps":
+            st = parse_steps(r.get("content"))
+            row["n_steps"] = len(st)
+            prev, words, legal = q, [], True
+            for _, g in st:                       # what each step does to the grid produced by the previous step
+                ids = [] if g is None else [i for i in range(G.size) if np.array_equal(prev[G.perms[i]], g.reshape(36))]
+                if not ids:
+                    legal = False
+                    words.append("?")
+                    if g is None:
+                        break
+                    prev = g.reshape(36)
+                    continue
+                words.append(SW[ids[0]] or "I")
+                prev = g.reshape(36)
+            row["step_words"] = " | ".join(words)
+            row["steps_all_legal"] = bool(st) and legal
+            row["steps_reach_answer"] = bool(st) and ans is not None and np.array_equal(prev, ans.reshape(36))
+            row["steps_correct_chain"] = bool(row["steps_all_legal"] and
+                                              np.array_equal(prev, np.array(t["expected"]).reshape(36)))
+            row["steps_text"] = " | ".join(d for d, _ in st)
         if e == "describe":
             rule = parse_rule(r.get("content"))
             row["rule"] = rule if rule is not None else "unparsed"
