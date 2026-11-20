@@ -64,7 +64,7 @@ INSTRUCTION = {
     "answer": "Give your answer as " + GRID_FORMAT,
     "describe": ("First, describe the transformation in words, between <rule> and </rule>.\n"
                  "Then give your answer as " + GRID_FORMAT),
-    "steps": ("First, break the transformation down into the simplest steps it is made of. Describe each step, in "
+    "steps": ("First, break the transformation down into the steps it is made of. Describe each step, in "
               "order, between <step> and </step>.\n"
               "Then give your final answer as " + GRID_FORMAT),
     "ops": ("First, state the transformation as a sequence of these operations, between <ops> and </ops>.\n"

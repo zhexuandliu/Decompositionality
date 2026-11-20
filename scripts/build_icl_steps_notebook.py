@@ -26,7 +26,7 @@ No operation is named, and the number of steps is not given.
 
 **Two experiments per task:**
 * `answer`: give the transformed grid only.
-* `steps`: "break the transformation down into the simplest steps it is made of", one `<step>` per step, then the
+* `steps`: "break the transformation down into the steps it is made of", one `<step>` per step, then the
   final grid. No intermediate grids are requested.
 
 **Tasks.** The 6 two-operation rules AB, AC, BA, BC, CA, CB (A = shift rows right, B = rotate 90° clockwise,
