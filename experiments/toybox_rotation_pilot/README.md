@@ -125,6 +125,12 @@ Every question records its own crop, shift, objects and seed in `answers.json` (
 Rebuild and evaluate:
 
 ```bash
-python make_questions.py --videos videos --out batch1 --seed 0
+# the batch was built in three runs (each run starts its own random stream, so keep them separate to reproduce it)
+python make_questions.py --videos videos --out batch1 --tasks R,T \
+    --objects car_18,truck_24,truck_28,duck_12                     # default crop 1344x756, shift 240/150
+python make_questions.py --videos videos --out batch1 --tasks RT --merge \
+    --objects truck_20,car_21,truck_28,duck_12 --crop 1344x756 --shift 330,210
+python make_questions.py --videos videos --out batch1 --tasks M,RM,TM --merge \
+    --objects truck_20,car_21,truck_28,duck_12 --crop 1344x756 --shift 330,210
 OPENROUTER_API_KEY=... python eval_batch.py --batch batch1      # or notebooks/54_toybox_batch1.ipynb in Colab
 ```
