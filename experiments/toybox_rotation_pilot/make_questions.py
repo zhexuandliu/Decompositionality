@@ -217,27 +217,55 @@ def render(q, qid, video_dir, table, out: Path):
 
 
 def main():
+    global CROP_W, CROP_H, SHIFT
     ap = argparse.ArgumentParser()
     ap.add_argument("--videos", required=True, type=Path)
     ap.add_argument("--out", default=HERE / "batch1", type=Path)
     ap.add_argument("--seed", default=0, type=int)
     ap.add_argument("--n", default=10, type=int)
+    ap.add_argument("--tasks", default="R,T,RT", help="subset of R,T,RT to (re)build")
+    ap.add_argument("--objects", default=None, help="comma-separated objects to use (default: all in keyframes.json)")
+    ap.add_argument("--crop", default=None, help="crop window WxH in frame pixels, e.g. 1200x675")
+    ap.add_argument("--shift", default=None, help="object shift dx,dy in frame pixels, e.g. 330,210")
+    ap.add_argument("--merge", action="store_true", help="keep the other tasks already in <out>/answers.json")
     a = ap.parse_args()
+    if a.crop:
+        CROP_W, CROP_H = map(int, a.crop.split("x"))
+    if a.shift:
+        dx, dy = map(int, a.shift.split(","))
+        SHIFT = {"right": (dx, 0), "left": (-dx, 0), "down": (0, dy), "up": (0, -dy)}
     table = json.loads((HERE / "keyframes.json").read_text())["objects"]
+    if a.objects:
+        table = {k: table[k] for k in a.objects.split(",")}
+    tasks = a.tasks.split(",")
     rng = random.Random(a.seed)
-    qs = (rotation_questions(rng, table, a.n) + translation_questions(rng, table, a.n)
-          + combined_questions(rng, table, a.n))
-    answers = {"seed": a.seed, "prompt": PROMPT, "crop": {"frame": [FRAME_W, FRAME_H], "window": [CROP_W, CROP_H],
-               "object_shift_px": SHIFT, "output_width": OUT_W},
-               "note": "orientations are approximate (hand-rotated, visually checked keyframes); translations are "
+    qs = []
+    if "R" in tasks:
+        qs += rotation_questions(rng, table, a.n)
+    if "T" in tasks:
+        qs += translation_questions(rng, table, a.n)
+    if "RT" in tasks:
+        qs += combined_questions(rng, table, a.n)
+    ans_path = a.out / "answers.json"
+    answers = json.loads(ans_path.read_text()) if (a.merge and ans_path.exists()) else {"prompt": PROMPT, "questions": {}}
+    answers["note"] = ("orientations are approximate (hand-rotated, visually checked keyframes); translations are "
                        "crop-window shifts of recorded frames (camera-pan equivalent). Crops are placed from the object "
                        "centres in keyframes.json so that the object's displacement relative to the reference image "
-                       "(demo 'before' / query) equals the intended shift (0 when there is no shift)", "questions": {}}
+                       "(demo 'before' / query) equals the intended shift (0 when there is no shift). Each question "
+                       "records its own crop window, shift, objects and generation seed.")
+    answers.pop("crop", None); answers.pop("seed", None)
+    cfg = {"frame": [FRAME_W, FRAME_H], "window": [CROP_W, CROP_H], "object_shift_px": SHIFT, "output_width": OUT_W,
+           "seed": a.seed, "objects": sorted(table)}
     for i, q in enumerate(qs):
         qid = {"rotation": "R", "translation": "T", "rotation+translation": "RT"}[q["task"]] + f"{i % a.n:02d}"
+        if (a.out / qid).exists():
+            import shutil
+            shutil.rmtree(a.out / qid)
         q["answer"] = render(q, qid, a.videos, table, a.out)
+        q["config"] = cfg
         answers["questions"][qid] = q
-    (a.out / "answers.json").write_text(json.dumps(answers, indent=2))
+    answers["questions"] = dict(sorted(answers["questions"].items(), key=lambda kv: (kv[0].rstrip("0123456789"), kv[0])))
+    ans_path.write_text(json.dumps(answers, indent=2))
     print(len(qs), "questions ->", a.out)
 
 

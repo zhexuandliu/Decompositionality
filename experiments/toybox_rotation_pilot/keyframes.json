@@ -1,5 +1,5 @@
 {
- "note": "Visually checked keyframes at roughly 0/90/180/270 degrees counter-clockwise relative to the first frame of each Toybox ry video (proposed by orient.py, checked on contact sheets; tilted frames removed). Approximate: about +-15 degrees. 'centers' = object centre in full-frame pixels (x, y), used to place crops so the object's displacement equals the intended one.",
+ "note": "Visually checked keyframes at roughly 0/90/180/270 degrees counter-clockwise relative to the first frame of each Toybox ry video (proposed by orient.py, checked on contact sheets; tilted frames removed). Approximate: about +-15 degrees. 'centers' = object centre in full-frame pixels (x, y), used to place crops so the object's displacement equals the intended one. car_21 is an ry-plus (clockwise) video; its orientations are still given counter-clockwise relative to frame 0.",
  "objects": {
   "car_18": {
    "video": "car_18_pivothead_ryminus.mp4",
@@ -211,6 +211,128 @@
     "590": [
      1168,
      620
+    ]
+   },
+   "center_method": "automatic (locate.py), visually checked"
+  },
+  "truck_20": {
+   "video": "truck_20_pivothead_ryminus.mp4",
+   "frames": {
+    "0": [
+     0,
+     390,
+     764
+    ],
+    "90": [
+     90,
+     516
+    ],
+    "180": [
+     203,
+     606
+    ],
+    "270": [
+     300,
+     689
+    ]
+   },
+   "centers": {
+    "0": [
+     1078,
+     356
+    ],
+    "390": [
+     930,
+     418
+    ],
+    "764": [
+     1050,
+     298
+    ],
+    "90": [
+     974,
+     352
+    ],
+    "516": [
+     976,
+     414
+    ],
+    "203": [
+     926,
+     414
+    ],
+    "606": [
+     994,
+     468
+    ],
+    "300": [
+     946,
+     428
+    ],
+    "689": [
+     952,
+     398
+    ]
+   },
+   "center_method": "automatic (locate.py), visually checked"
+  },
+  "car_21": {
+   "video": "car_21_pivothead_ryplus.mp4",
+   "frames": {
+    "0": [
+     0,
+     330,
+     629
+    ],
+    "90": [
+     246,
+     539
+    ],
+    "180": [
+     180,
+     462
+    ],
+    "270": [
+     108,
+     402
+    ]
+   },
+   "centers": {
+    "0": [
+     970,
+     510
+    ],
+    "330": [
+     938,
+     474
+    ],
+    "629": [
+     1004,
+     434
+    ],
+    "246": [
+     900,
+     454
+    ],
+    "539": [
+     950,
+     504
+    ],
+    "180": [
+     974,
+     496
+    ],
+    "462": [
+     1000,
+     542
+    ],
+    "108": [
+     972,
+     496
+    ],
+    "402": [
+     996,
+     566
     ]
    },
    "center_method": "automatic (locate.py), visually checked"

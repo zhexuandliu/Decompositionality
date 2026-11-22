@@ -71,35 +71,42 @@ OPENROUTER_API_KEY=... python eval_once.py
 
 ## Batch 1: 30 questions (rotation / translation / rotation + translation)
 
-Built by `make_questions.py` from `keyframes.json`. The keyframes are visually checked frames at about
-0/90/180/270° for each object, proposed by `orient.py` (accumulated SIFT tracking).
+Built by `make_questions.py` from `keyframes.json`, the visually checked keyframes at about 0/90/180/270° per object.
+`orient.py` (accumulated SIFT tracking) proposes keyframes; they are manually chosen when the tracker drifts.
 
-| task | n | transformation | candidates |
-|---|---|---|---|
-| `R00-R09` | 10 | rotation by +90° (counter-clockwise), −90° or 180°, from recorded frames | 0 / 90 / 180 / 270° |
-| `T00-T09` | 10 | shift left / right / up / down | the four directions |
-| `RT00-RT09` | 10 | ±90° rotation plus a shift | correct; rotation only; shift only; wrong rotation direction + shift |
+| task | n | transformation | candidates | objects | crop / shift |
+|---|---|---|---|---|---|
+| `R00-R09` | 10 | rotation by +90° (counter-clockwise), −90° or 180°, from recorded frames | 0 / 90 / 180 / 270° | car_18, truck_24, truck_28, duck_12 | 1344×756 |
+| `T00-T09` | 10 | shift left / right / up / down | the four directions | same | 1344×756; 240 px / 150 px |
+| `RT00-RT09` | 10 | ±90° rotation plus a shift | correct; rotation only; shift only; wrong rotation direction + shift | truck_20, car_21, truck_28, duck_12 | 1344×756; 330 px / 210 px |
 
-* **Framing.** Every image is a 1344×756 crop of a recorded 1920×1080 frame, resized to 768 px wide.
+Every question records its own crop, shift, objects and seed in `answers.json` (`config`).
+
+* **Framing.** Every image is a crop of a recorded 1920×1080 frame, resized to 768 px wide. Nothing is padded,
+  generated or digitally rotated.
 * **Object-centred placement.** Crops are placed from the object centre in each keyframe (`keyframes.json`
   `centers`: automatic with `locate.py` and visually checked; manual for `truck_28`, whose rust colour is close to
   skin). Within a demonstration pair, and between the query and each candidate, the object's position changes by
-  exactly the intended shift: 240 px horizontally or 150 px vertically in the frame, or 0 when there is no shift.
-  This cancels the hand's own motion between recorded frames. Without it, a "rotation only" image could look
-  shifted and a "rotation + shift" image could look barely shifted.
-* **Translations.** Moving the crop window is equivalent to the camera panning. Large objects (the garbage truck)
-  and objects held high (the tow truck at 0°) are partly cut off after some shifts.
-* **Objects.** Only 4 objects (`car_18`, `truck_24`, `truck_28`, `duck_12`), so every question uses all four and
-  some demonstration pairs repeat across questions (e.g. RT07/RT08 share two pairs). The query object always
-  differs from the three demonstration objects.
+  exactly the intended shift, or by 0 when there is no shift. This cancels the hand's own motion between recorded
+  frames.
+* **Translations.** Moving the crop window is equivalent to the camera panning.
+* **RT rebuilt.** RT was rebuilt with smaller objects and a larger shift (25% / 28% of the crop), so the shift is
+  easier to see. The garbage truck (`truck_24`) and the blue car (`car_18`) fill so much of the frame that a shift
+  pushed them half out of view, so they are not used in RT. The rebuild command was:
+  ```bash
+  python make_questions.py --videos videos --out batch1 --tasks RT \
+      --objects truck_20,car_21,truck_28,duck_12 --crop 1344x756 --shift 330,210 --merge
+  ```
+* **Objects.**
+  * Only 4 objects per task, so every question uses all four and some demonstration pairs repeat across questions.
+    The query object always differs from the three demonstration objects.
+  * `car_21` is a clockwise (`ryplus`) video; its keyframes are still labelled counter-clockwise from frame 0.
 * **Rotations.** Orientations are approximate (about ±15°).
-* **"Shift only" candidate in RT.** Uses a different recorded frame at the query orientation when one exists;
-  otherwise it uses the query frame itself.
 * **Checks.** All 30 composites were inspected: rotation direction and shift direction are consistent within each
-  question, the intended answer is right, and the four candidates differ visibly. For several questions the object
-  positions were also checked numerically from the crop origins.
-* **Files.** Answers are in `batch1/answers.json`, which is only read when scoring. Crop origins are recorded
-  there too.
+  question, the intended answer is right, and the four candidates differ visibly. Several questions were also
+  checked numerically from the crop origins.
+* **Viewer and answers.** `batch1/viewer.html` shows all questions with answers hidden (`python make_viewer.py`).
+  Answers are in `batch1/answers.json`, which is only read when scoring.
 
 Rebuild and evaluate:
 
