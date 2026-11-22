@@ -80,17 +80,26 @@ Built by `make_questions.py` from `keyframes.json`. The keyframes are visually c
 | `T00-T09` | 10 | shift left / right / up / down | the four directions |
 | `RT00-RT09` | 10 | ±90° rotation plus a shift | correct; rotation only; shift only; wrong rotation direction + shift |
 
-* **Framing.** Every image is a 1344×756 crop of a recorded 1920×1080 frame, resized to 768 px wide. Only
-  `make_questions.py` defines the crop.
-* **Translations.** Made by moving the crop window, which is equivalent to the camera panning. The object moves
-  240 px horizontally or 150 px vertically in the original frame (18% / 20% of the crop). Large objects (the
-  garbage truck) can be partly cut off after a shift.
-* **Objects.** Only 4 objects (`car_18`, `truck_24`, `truck_28`, `duck_12`), so every question uses all four.
-  The query object is always different from the three demonstration objects.
+* **Framing.** Every image is a 1344×756 crop of a recorded 1920×1080 frame, resized to 768 px wide.
+* **Object-centred placement.** Crops are placed from the object centre in each keyframe (`keyframes.json`
+  `centers`: automatic with `locate.py` and visually checked; manual for `truck_28`, whose rust colour is close to
+  skin). Within a demonstration pair, and between the query and each candidate, the object's position changes by
+  exactly the intended shift: 240 px horizontally or 150 px vertically in the frame, or 0 when there is no shift.
+  This cancels the hand's own motion between recorded frames. Without it, a "rotation only" image could look
+  shifted and a "rotation + shift" image could look barely shifted.
+* **Translations.** Moving the crop window is equivalent to the camera panning. Large objects (the garbage truck)
+  and objects held high (the tow truck at 0°) are partly cut off after some shifts.
+* **Objects.** Only 4 objects (`car_18`, `truck_24`, `truck_28`, `duck_12`), so every question uses all four and
+  some demonstration pairs repeat across questions (e.g. RT07/RT08 share two pairs). The query object always
+  differs from the three demonstration objects.
 * **Rotations.** Orientations are approximate (about ±15°).
 * **"Shift only" candidate in RT.** Uses a different recorded frame at the query orientation when one exists;
   otherwise it uses the query frame itself.
-* **Files.** Answers are in `batch1/answers.json`, which is only read when scoring.
+* **Checks.** All 30 composites were inspected: rotation direction and shift direction are consistent within each
+  question, the intended answer is right, and the four candidates differ visibly. For several questions the object
+  positions were also checked numerically from the crop origins.
+* **Files.** Answers are in `batch1/answers.json`, which is only read when scoring. Crop origins are recorded
+  there too.
 
 Rebuild and evaluate:
 

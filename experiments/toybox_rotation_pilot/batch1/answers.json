@@ -30,7 +30,7 @@
     },
     "output_width": 768
   },
-  "note": "orientations are approximate (hand-rotated, visually checked keyframes); translations are crop-window shifts of recorded frames (camera-pan equivalent)",
+  "note": "orientations are approximate (hand-rotated, visually checked keyframes); translations are crop-window shifts of recorded frames (camera-pan equivalent). Crops are placed from the object centres in keyframes.json so that the object's displacement relative to the reference image (demo 'before' / query) equals the intended shift (0 when there is no shift)",
   "questions": {
     "R00": {
       "task": "rotation",
@@ -84,7 +84,11 @@
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            514,
+            116
+          ]
         },
         {
           "kind": "rotate 180",
@@ -92,7 +96,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            374,
+            34
+          ]
         },
         {
           "kind": "rotate 270",
@@ -100,7 +108,11 @@
           "orient": 180,
           "move": null,
           "correct": true,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            316,
+            168
+          ]
         },
         {
           "kind": "rotate 90",
@@ -108,9 +120,51 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            390,
+            32
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              353,
+              92
+            ],
+            [
+              268,
+              12
+            ]
+          ],
+          [
+            [
+              348,
+              0
+            ],
+            [
+              406,
+              316
+            ]
+          ],
+          [
+            [
+              174,
+              50
+            ],
+            [
+              264,
+              46
+            ]
+          ]
+        ],
+        "query": [
+          416,
+          78
+        ]
+      },
       "answer": "C"
     },
     "R01": {
@@ -165,7 +219,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            76,
+            132
+          ]
         },
         {
           "kind": "rotate 180",
@@ -173,7 +231,11 @@
           "orient": 180,
           "move": null,
           "correct": true,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            196,
+            256
+          ]
         },
         {
           "kind": "rotate 270",
@@ -181,7 +243,11 @@
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            200,
+            0
+          ]
         },
         {
           "kind": "rotate 0",
@@ -189,9 +255,51 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            216,
+            88
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              328,
+              0
+            ],
+            [
+              400,
+              316
+            ]
+          ],
+          [
+            [
+              514,
+              116
+            ],
+            [
+              374,
+              34
+            ]
+          ],
+          [
+            [
+              268,
+              12
+            ],
+            [
+              263,
+              222
+            ]
+          ]
+        ],
+        "query": [
+          42,
+          126
+        ]
+      },
       "answer": "B"
     },
     "R02": {
@@ -246,7 +354,11 @@
           "orient": 270,
           "move": null,
           "correct": true,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            416,
+            78
+          ]
         },
         {
           "kind": "rotate 90",
@@ -254,7 +366,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            374,
+            34
+          ]
         },
         {
           "kind": "rotate 180",
@@ -262,7 +378,11 @@
           "orient": 180,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            316,
+            168
+          ]
         },
         {
           "kind": "rotate 0",
@@ -270,9 +390,51 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            390,
+            32
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              368,
+              0
+            ],
+            [
+              263,
+              265
+            ]
+          ],
+          [
+            [
+              196,
+              188
+            ],
+            [
+              76,
+              64
+            ]
+          ],
+          [
+            [
+              316,
+              128
+            ],
+            [
+              396,
+              0
+            ]
+          ]
+        ],
+        "query": [
+          452,
+          74
+        ]
+      },
       "answer": "A"
     },
     "R03": {
@@ -327,7 +489,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            348,
+            70
+          ]
         },
         {
           "kind": "rotate 180",
@@ -335,7 +501,11 @@
           "orient": 180,
           "move": null,
           "correct": true,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            316,
+            168
+          ]
         },
         {
           "kind": "rotate 0",
@@ -343,7 +513,11 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            386,
+            314
+          ]
         },
         {
           "kind": "rotate 270",
@@ -351,9 +525,51 @@
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            514,
+            116
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              76,
+              64
+            ],
+            [
+              174,
+              50
+            ]
+          ],
+          [
+            [
+              400,
+              316
+            ],
+            [
+              328,
+              0
+            ]
+          ],
+          [
+            [
+              368,
+              0
+            ],
+            [
+              353,
+              135
+            ]
+          ]
+        ],
+        "query": [
+          390,
+          32
+        ]
+      },
       "answer": "B"
     },
     "R04": {
@@ -408,7 +624,11 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            328,
+            0
+          ]
         },
         {
           "kind": "rotate 180",
@@ -416,7 +636,11 @@
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            496,
+            268
+          ]
         },
         {
           "kind": "rotate 0",
@@ -424,7 +648,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            246,
+            264
+          ]
         },
         {
           "kind": "rotate 90",
@@ -432,9 +660,51 @@
           "orient": 180,
           "move": null,
           "correct": true,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            400,
+            316
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              263,
+              265
+            ],
+            [
+              368,
+              0
+            ]
+          ],
+          [
+            [
+              390,
+              32
+            ],
+            [
+              374,
+              34
+            ]
+          ],
+          [
+            [
+              264,
+              46
+            ],
+            [
+              174,
+              50
+            ]
+          ]
+        ],
+        "query": [
+          316,
+          140
+        ]
+      },
       "answer": "D"
     },
     "R05": {
@@ -489,7 +759,11 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            396,
+            0
+          ]
         },
         {
           "kind": "rotate 90",
@@ -497,7 +771,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            246,
+            252
+          ]
         },
         {
           "kind": "rotate 180",
@@ -505,7 +783,11 @@
           "orient": 180,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            400,
+            304
+          ]
         },
         {
           "kind": "rotate 270",
@@ -513,9 +795,51 @@
           "orient": 270,
           "move": null,
           "correct": true,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            496,
+            256
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              368,
+              0
+            ],
+            [
+              263,
+              265
+            ]
+          ],
+          [
+            [
+              76,
+              64
+            ],
+            [
+              90,
+              164
+            ]
+          ],
+          [
+            [
+              338,
+              94
+            ],
+            [
+              348,
+              70
+            ]
+          ]
+        ],
+        "query": [
+          348,
+          14
+        ]
+      },
       "answer": "D"
     },
     "R06": {
@@ -570,7 +894,11 @@
           "orient": 180,
           "move": null,
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            264,
+            46
+          ]
         },
         {
           "kind": "rotate 270",
@@ -578,7 +906,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            76,
+            64
+          ]
         },
         {
           "kind": "rotate 90",
@@ -586,7 +918,11 @@
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            174,
+            50
+          ]
         },
         {
           "kind": "rotate 180",
@@ -594,9 +930,51 @@
           "orient": 0,
           "move": null,
           "correct": true,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            90,
+            164
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              328,
+              0
+            ],
+            [
+              400,
+              316
+            ]
+          ],
+          [
+            [
+              348,
+              70
+            ],
+            [
+              416,
+              78
+            ]
+          ],
+          [
+            [
+              263,
+              222
+            ],
+            [
+              268,
+              12
+            ]
+          ]
+        ],
+        "query": [
+          196,
+          188
+        ]
+      },
       "answer": "D"
     },
     "R07": {
@@ -651,7 +1029,11 @@
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            374,
+            34
+          ]
         },
         {
           "kind": "rotate 0",
@@ -659,7 +1041,11 @@
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            514,
+            116
+          ]
         },
         {
           "kind": "rotate 270",
@@ -667,7 +1053,11 @@
           "orient": 180,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            316,
+            168
+          ]
         },
         {
           "kind": "rotate 90",
@@ -675,9 +1065,51 @@
           "orient": 0,
           "move": null,
           "correct": true,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            386,
+            314
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              196,
+              256
+            ],
+            [
+              200,
+              0
+            ]
+          ],
+          [
+            [
+              246,
+              238
+            ],
+            [
+              400,
+              290
+            ]
+          ],
+          [
+            [
+              368,
+              0
+            ],
+            [
+              268,
+              55
+            ]
+          ]
+        ],
+        "query": [
+          416,
+          78
+        ]
+      },
       "answer": "D"
     },
     "R08": {
@@ -732,7 +1164,11 @@
           "orient": 90,
           "move": null,
           "correct": true,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            76,
+            132
+          ]
         },
         {
           "kind": "rotate 270",
@@ -740,7 +1176,11 @@
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            200,
+            0
+          ]
         },
         {
           "kind": "rotate 0",
@@ -748,7 +1188,11 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            90,
+            232
+          ]
         },
         {
           "kind": "rotate 180",
@@ -756,9 +1200,51 @@
           "orient": 180,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            196,
+            256
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              246,
+              238
+            ],
+            [
+              420,
+              262
+            ]
+          ],
+          [
+            [
+              368,
+              0
+            ],
+            [
+              268,
+              55
+            ]
+          ],
+          [
+            [
+              514,
+              116
+            ],
+            [
+              452,
+              74
+            ]
+          ]
+        ],
+        "query": [
+          42,
+          126
+        ]
+      },
       "answer": "A"
     },
     "R09": {
@@ -768,179 +1254,149 @@
       },
       "demos": [
         {
-          "object": "truck_28",
+          "object": "duck_12",
           "before": {
-            "frame": 0,
-            "orient": 0
+            "frame": 590,
+            "orient": 270
           },
           "after": {
-            "frame": 72,
-            "orient": 90
+            "frame": 0,
+            "orient": 0
           }
         },
         {
           "object": "truck_24",
           "before": {
-            "frame": 81,
-            "orient": 90
+            "frame": 333,
+            "orient": 0
           },
           "after": {
-            "frame": 174,
-            "orient": 180
+            "frame": 402,
+            "orient": 90
           }
         },
         {
-          "object": "car_18",
+          "object": "truck_28",
           "before": {
-            "frame": 506,
-            "orient": 270
+            "frame": 72,
+            "orient": 90
           },
           "after": {
-            "frame": 315,
-            "orient": 0
+            "frame": 165,
+            "orient": 180
           }
         }
       ],
       "query": {
-        "object": "duck_12",
-        "frame": 518,
-        "orient": 180
+        "object": "car_18",
+        "frame": 248,
+        "orient": 270
       },
       "candidates": [
         {
           "kind": "rotate 180",
-          "frame": 0,
-          "orient": 0,
-          "move": null,
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "rotate 90",
-          "frame": 300,
-          "orient": 270,
-          "move": null,
-          "correct": true,
-          "letter": "B"
-        },
-        {
-          "kind": "rotate 270",
-          "frame": 423,
+          "frame": 108,
           "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "A",
+          "crop_origin": [
+            76,
+            132
+          ]
         },
         {
-          "kind": "rotate 0",
-          "frame": 216,
+          "kind": "rotate 90",
+          "frame": 0,
+          "orient": 0,
+          "move": null,
+          "correct": true,
+          "letter": "B",
+          "crop_origin": [
+            42,
+            126
+          ]
+        },
+        {
+          "kind": "rotate 270",
+          "frame": 186,
           "orient": 180,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "C",
+          "crop_origin": [
+            196,
+            256
+          ]
+        },
+        {
+          "kind": "rotate 0",
+          "frame": 506,
+          "orient": 270,
+          "move": null,
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            200,
+            0
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              496,
+              256
+            ],
+            [
+              396,
+              0
+            ]
+          ],
+          [
+            [
+              390,
+              32
+            ],
+            [
+              374,
+              34
+            ]
+          ],
+          [
+            [
+              268,
+              12
+            ],
+            [
+              353,
+              92
+            ]
+          ]
+        ],
+        "query": [
+          174,
+          118
+        ]
+      },
       "answer": "B"
     },
     "T00": {
-      "task": "translation",
-      "rule": {
-        "move": "up"
-      },
-      "demos": [
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 252,
-            "orient": 270
-          },
-          "after": {
-            "frame": 252,
-            "orient": 270,
-            "move": "up"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "up"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 108,
-            "orient": 90
-          },
-          "after": {
-            "frame": 108,
-            "orient": 90,
-            "move": "up"
-          }
-        }
-      ],
-      "query": {
-        "object": "duck_12",
-        "frame": 357,
-        "orient": 0
-      },
-      "candidates": [
-        {
-          "kind": "move down",
-          "frame": 357,
-          "orient": 0,
-          "move": "down",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move left",
-          "frame": 357,
-          "orient": 0,
-          "move": "left",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "move up",
-          "frame": 357,
-          "orient": 0,
-          "move": "up",
-          "correct": true,
-          "letter": "C"
-        },
-        {
-          "kind": "move right",
-          "frame": 357,
-          "orient": 0,
-          "move": "right",
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "C"
-    },
-    "T01": {
       "task": "translation",
       "rule": {
         "move": "left"
       },
       "demos": [
         {
-          "object": "car_18",
+          "object": "truck_24",
           "before": {
-            "frame": 506,
-            "orient": 270
+            "frame": 402,
+            "orient": 90
           },
           "after": {
-            "frame": 506,
-            "orient": 270,
+            "frame": 402,
+            "orient": 90,
             "move": "left"
           }
         },
@@ -957,13 +1413,565 @@
           }
         },
         {
-          "object": "truck_24",
+          "object": "car_18",
           "before": {
-            "frame": 333,
+            "frame": 108,
+            "orient": 90
+          },
+          "after": {
+            "frame": 108,
+            "orient": 90,
+            "move": "left"
+          }
+        }
+      ],
+      "query": {
+        "object": "truck_28",
+        "frame": 0,
+        "orient": 0
+      },
+      "candidates": [
+        {
+          "kind": "move down",
+          "frame": 0,
+          "orient": 0,
+          "move": "down",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            336,
+            0
+          ]
+        },
+        {
+          "kind": "move left",
+          "frame": 0,
+          "orient": 0,
+          "move": "left",
+          "correct": true,
+          "letter": "B",
+          "crop_origin": [
+            576,
+            150
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 0,
+          "orient": 0,
+          "move": "up",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            336,
+            300
+          ]
+        },
+        {
+          "kind": "move right",
+          "frame": 0,
+          "orient": 0,
+          "move": "right",
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            96,
+            150
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              336,
+              34
+            ],
+            [
+              576,
+              34
+            ]
+          ],
+          [
+            [
+              246,
+              238
+            ],
+            [
+              486,
+              238
+            ]
+          ],
+          [
+            [
+              76,
+              64
+            ],
+            [
+              316,
+              64
+            ]
+          ]
+        ],
+        "query": [
+          336,
+          150
+        ]
+      },
+      "answer": "B"
+    },
+    "T01": {
+      "task": "translation",
+      "rule": {
+        "move": "right"
+      },
+      "demos": [
+        {
+          "object": "car_18",
+          "before": {
+            "frame": 315,
             "orient": 0
           },
           "after": {
-            "frame": 333,
+            "frame": 315,
+            "orient": 0,
+            "move": "right"
+          }
+        },
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 252,
+            "orient": 270
+          },
+          "after": {
+            "frame": 252,
+            "orient": 270,
+            "move": "right"
+          }
+        },
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 81,
+            "orient": 90
+          },
+          "after": {
+            "frame": 81,
+            "orient": 90,
+            "move": "right"
+          }
+        }
+      ],
+      "query": {
+        "object": "duck_12",
+        "frame": 138,
+        "orient": 90
+      },
+      "candidates": [
+        {
+          "kind": "move left",
+          "frame": 138,
+          "orient": 90,
+          "move": "left",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            556,
+            150
+          ]
+        },
+        {
+          "kind": "move right",
+          "frame": 138,
+          "orient": 90,
+          "move": "right",
+          "correct": true,
+          "letter": "B",
+          "crop_origin": [
+            76,
+            150
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 138,
+          "orient": 90,
+          "move": "up",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            316,
+            300
+          ]
+        },
+        {
+          "kind": "move down",
+          "frame": 138,
+          "orient": 90,
+          "move": "down",
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            316,
+            0
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              240,
+              20
+            ],
+            [
+              0,
+              20
+            ]
+          ],
+          [
+            [
+              263,
+              222
+            ],
+            [
+              23,
+              222
+            ]
+          ],
+          [
+            [
+              348,
+              70
+            ],
+            [
+              108,
+              70
+            ]
+          ]
+        ],
+        "query": [
+          316,
+          150
+        ]
+      },
+      "answer": "B"
+    },
+    "T02": {
+      "task": "translation",
+      "rule": {
+        "move": "right"
+      },
+      "demos": [
+        {
+          "object": "car_18",
+          "before": {
+            "frame": 186,
+            "orient": 180
+          },
+          "after": {
+            "frame": 186,
+            "orient": 180,
+            "move": "right"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 632,
+            "orient": 0
+          },
+          "after": {
+            "frame": 632,
+            "orient": 0,
+            "move": "right"
+          }
+        },
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 255,
+            "orient": 270
+          },
+          "after": {
+            "frame": 255,
+            "orient": 270,
+            "move": "right"
+          }
+        }
+      ],
+      "query": {
+        "object": "truck_28",
+        "frame": 252,
+        "orient": 270
+      },
+      "candidates": [
+        {
+          "kind": "move right",
+          "frame": 252,
+          "orient": 270,
+          "move": "right",
+          "correct": true,
+          "letter": "A",
+          "crop_origin": [
+            23,
+            174
+          ]
+        },
+        {
+          "kind": "move left",
+          "frame": 252,
+          "orient": 270,
+          "move": "left",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            503,
+            174
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 252,
+          "orient": 270,
+          "move": "up",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            263,
+            324
+          ]
+        },
+        {
+          "kind": "move down",
+          "frame": 252,
+          "orient": 270,
+          "move": "down",
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            263,
+            24
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              240,
+              188
+            ],
+            [
+              0,
+              188
+            ]
+          ],
+          [
+            [
+              328,
+              0
+            ],
+            [
+              88,
+              0
+            ]
+          ],
+          [
+            [
+              416,
+              78
+            ],
+            [
+              176,
+              78
+            ]
+          ]
+        ],
+        "query": [
+          263,
+          174
+        ]
+      },
+      "answer": "A"
+    },
+    "T03": {
+      "task": "translation",
+      "rule": {
+        "move": "up"
+      },
+      "demos": [
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 300,
+            "orient": 270
+          },
+          "after": {
+            "frame": 300,
+            "orient": 270,
+            "move": "up"
+          }
+        },
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 72,
+            "orient": 90
+          },
+          "after": {
+            "frame": 72,
+            "orient": 90,
+            "move": "up"
+          }
+        },
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 465,
+            "orient": 180
+          },
+          "after": {
+            "frame": 465,
+            "orient": 180,
+            "move": "up"
+          }
+        }
+      ],
+      "query": {
+        "object": "car_18",
+        "frame": 186,
+        "orient": 180
+      },
+      "candidates": [
+        {
+          "kind": "move down",
+          "frame": 186,
+          "orient": 180,
+          "move": "down",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            240,
+            24
+          ]
+        },
+        {
+          "kind": "move left",
+          "frame": 186,
+          "orient": 180,
+          "move": "left",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            480,
+            174
+          ]
+        },
+        {
+          "kind": "move right",
+          "frame": 186,
+          "orient": 180,
+          "move": "right",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            0,
+            174
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 186,
+          "orient": 180,
+          "move": "up",
+          "correct": true,
+          "letter": "D",
+          "crop_origin": [
+            240,
+            324
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              406,
+              174
+            ],
+            [
+              406,
+              324
+            ]
+          ],
+          [
+            [
+              268,
+              12
+            ],
+            [
+              268,
+              162
+            ]
+          ],
+          [
+            [
+              338,
+              94
+            ],
+            [
+              338,
+              244
+            ]
+          ]
+        ],
+        "query": [
+          240,
+          174
+        ]
+      },
+      "answer": "D"
+    },
+    "T04": {
+      "task": "translation",
+      "rule": {
+        "move": "left"
+      },
+      "demos": [
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 465,
+            "orient": 180
+          },
+          "after": {
+            "frame": 465,
+            "orient": 180,
+            "move": "left"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 0,
+            "orient": 0
+          },
+          "after": {
+            "frame": 0,
+            "orient": 0,
+            "move": "left"
+          }
+        },
+        {
+          "object": "car_18",
+          "before": {
+            "frame": 0,
+            "orient": 0
+          },
+          "after": {
+            "frame": 0,
             "orient": 0,
             "move": "left"
           }
@@ -976,12 +1984,16 @@
       },
       "candidates": [
         {
-          "kind": "move left",
+          "kind": "move down",
           "frame": 72,
           "orient": 90,
-          "move": "left",
-          "correct": true,
-          "letter": "A"
+          "move": "down",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            268,
+            0
+          ]
         },
         {
           "kind": "move right",
@@ -989,7 +2001,23 @@
           "orient": 90,
           "move": "right",
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            28,
+            150
+          ]
+        },
+        {
+          "kind": "move left",
+          "frame": 72,
+          "orient": 90,
+          "move": "left",
+          "correct": true,
+          "letter": "C",
+          "crop_origin": [
+            508,
+            150
+          ]
         },
         {
           "kind": "move up",
@@ -997,270 +2025,52 @@
           "orient": 90,
           "move": "up",
           "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "move down",
-          "frame": 72,
-          "orient": 90,
-          "move": "down",
-          "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            268,
+            300
+          ]
         }
       ],
-      "answer": "A"
-    },
-    "T02": {
-      "task": "translation",
-      "rule": {
-        "move": "right"
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              336,
+              94
+            ],
+            [
+              576,
+              94
+            ]
+          ],
+          [
+            [
+              336,
+              0
+            ],
+            [
+              576,
+              0
+            ]
+          ],
+          [
+            [
+              42,
+              58
+            ],
+            [
+              282,
+              58
+            ]
+          ]
+        ],
+        "query": [
+          268,
+          150
+        ]
       },
-      "demos": [
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "right"
-          }
-        },
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 632,
-            "orient": 0
-          },
-          "after": {
-            "frame": 632,
-            "orient": 0,
-            "move": "right"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 248,
-            "orient": 270
-          },
-          "after": {
-            "frame": 248,
-            "orient": 270,
-            "move": "right"
-          }
-        }
-      ],
-      "query": {
-        "object": "truck_28",
-        "frame": 0,
-        "orient": 0
-      },
-      "candidates": [
-        {
-          "kind": "move right",
-          "frame": 0,
-          "orient": 0,
-          "move": "right",
-          "correct": true,
-          "letter": "A"
-        },
-        {
-          "kind": "move left",
-          "frame": 0,
-          "orient": 0,
-          "move": "left",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "move up",
-          "frame": 0,
-          "orient": 0,
-          "move": "up",
-          "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "move down",
-          "frame": 0,
-          "orient": 0,
-          "move": "down",
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "A"
-    },
-    "T03": {
-      "task": "translation",
-      "rule": {
-        "move": "right"
-      },
-      "demos": [
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 138,
-            "orient": 90
-          },
-          "after": {
-            "frame": 138,
-            "orient": 90,
-            "move": "right"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "right"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 506,
-            "orient": 270
-          },
-          "after": {
-            "frame": 506,
-            "orient": 270,
-            "move": "right"
-          }
-        }
-      ],
-      "query": {
-        "object": "truck_28",
-        "frame": 165,
-        "orient": 180
-      },
-      "candidates": [
-        {
-          "kind": "move down",
-          "frame": 165,
-          "orient": 180,
-          "move": "down",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move left",
-          "frame": 165,
-          "orient": 180,
-          "move": "left",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "move right",
-          "frame": 165,
-          "orient": 180,
-          "move": "right",
-          "correct": true,
-          "letter": "C"
-        },
-        {
-          "kind": "move up",
-          "frame": 165,
-          "orient": 180,
-          "move": "up",
-          "correct": false,
-          "letter": "D"
-        }
-      ],
       "answer": "C"
-    },
-    "T04": {
-      "task": "translation",
-      "rule": {
-        "move": "up"
-      },
-      "demos": [
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 506,
-            "orient": 270
-          },
-          "after": {
-            "frame": 506,
-            "orient": 270,
-            "move": "up"
-          }
-        },
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 252,
-            "orient": 270
-          },
-          "after": {
-            "frame": 252,
-            "orient": 270,
-            "move": "up"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 534,
-            "orient": 270
-          },
-          "after": {
-            "frame": 534,
-            "orient": 270,
-            "move": "up"
-          }
-        }
-      ],
-      "query": {
-        "object": "duck_12",
-        "frame": 138,
-        "orient": 90
-      },
-      "candidates": [
-        {
-          "kind": "move down",
-          "frame": 138,
-          "orient": 90,
-          "move": "down",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move right",
-          "frame": 138,
-          "orient": 90,
-          "move": "right",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "move left",
-          "frame": 138,
-          "orient": 90,
-          "move": "left",
-          "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "move up",
-          "frame": 138,
-          "orient": 90,
-          "move": "up",
-          "correct": true,
-          "letter": "D"
-        }
-      ],
-      "answer": "D"
     },
     "T05": {
       "task": "translation",
@@ -1271,289 +2081,37 @@
         {
           "object": "car_18",
           "before": {
-            "frame": 614,
-            "orient": 0
-          },
-          "after": {
-            "frame": 614,
-            "orient": 0,
-            "move": "down"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 402,
-            "orient": 90
-          },
-          "after": {
-            "frame": 402,
-            "orient": 90,
-            "move": "down"
-          }
-        },
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 72,
-            "orient": 90
-          },
-          "after": {
-            "frame": 72,
-            "orient": 90,
-            "move": "down"
-          }
-        }
-      ],
-      "query": {
-        "object": "duck_12",
-        "frame": 518,
-        "orient": 180
-      },
-      "candidates": [
-        {
-          "kind": "move up",
-          "frame": 518,
-          "orient": 180,
-          "move": "up",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move down",
-          "frame": 518,
-          "orient": 180,
-          "move": "down",
-          "correct": true,
-          "letter": "B"
-        },
-        {
-          "kind": "move right",
-          "frame": 518,
-          "orient": 180,
-          "move": "right",
-          "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "move left",
-          "frame": 518,
-          "orient": 180,
-          "move": "left",
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "B"
-    },
-    "T06": {
-      "task": "translation",
-      "rule": {
-        "move": "left"
-      },
-      "demos": [
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 108,
-            "orient": 90
-          },
-          "after": {
-            "frame": 108,
-            "orient": 90,
-            "move": "left"
-          }
-        },
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 357,
-            "orient": 0
-          },
-          "after": {
-            "frame": 357,
-            "orient": 0,
-            "move": "left"
-          }
-        },
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "left"
-          }
-        }
-      ],
-      "query": {
-        "object": "truck_24",
-        "frame": 174,
-        "orient": 180
-      },
-      "candidates": [
-        {
-          "kind": "move down",
-          "frame": 174,
-          "orient": 180,
-          "move": "down",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move up",
-          "frame": 174,
-          "orient": 180,
-          "move": "up",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "move right",
-          "frame": 174,
-          "orient": 180,
-          "move": "right",
-          "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "move left",
-          "frame": 174,
-          "orient": 180,
-          "move": "left",
-          "correct": true,
-          "letter": "D"
-        }
-      ],
-      "answer": "D"
-    },
-    "T07": {
-      "task": "translation",
-      "rule": {
-        "move": "left"
-      },
-      "demos": [
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 255,
-            "orient": 270
-          },
-          "after": {
-            "frame": 255,
-            "orient": 270,
-            "move": "left"
-          }
-        },
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "left"
-          }
-        },
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 300,
-            "orient": 270
-          },
-          "after": {
-            "frame": 300,
-            "orient": 270,
-            "move": "left"
-          }
-        }
-      ],
-      "query": {
-        "object": "car_18",
-        "frame": 447,
-        "orient": 180
-      },
-      "candidates": [
-        {
-          "kind": "move down",
-          "frame": 447,
-          "orient": 180,
-          "move": "down",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move right",
-          "frame": 447,
-          "orient": 180,
-          "move": "right",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "move left",
-          "frame": 447,
-          "orient": 180,
-          "move": "left",
-          "correct": true,
-          "letter": "C"
-        },
-        {
-          "kind": "move up",
-          "frame": 447,
-          "orient": 180,
-          "move": "up",
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "C"
-    },
-    "T08": {
-      "task": "translation",
-      "rule": {
-        "move": "right"
-      },
-      "demos": [
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 632,
-            "orient": 0
-          },
-          "after": {
-            "frame": 632,
-            "orient": 0,
-            "move": "right"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 402,
-            "orient": 90
-          },
-          "after": {
-            "frame": 402,
-            "orient": 90,
-            "move": "right"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 447,
+            "frame": 186,
             "orient": 180
           },
           "after": {
-            "frame": 447,
+            "frame": 186,
             "orient": 180,
-            "move": "right"
+            "move": "down"
+          }
+        },
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 402,
+            "orient": 90
+          },
+          "after": {
+            "frame": 402,
+            "orient": 90,
+            "move": "down"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 518,
+            "orient": 180
+          },
+          "after": {
+            "frame": 518,
+            "orient": 180,
+            "move": "down"
           }
         }
       ],
@@ -1564,20 +2122,40 @@
       },
       "candidates": [
         {
-          "kind": "move right",
+          "kind": "move up",
           "frame": 0,
           "orient": 0,
-          "move": "right",
-          "correct": true,
-          "letter": "A"
+          "move": "up",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            336,
+            300
+          ]
         },
         {
           "kind": "move down",
           "frame": 0,
           "orient": 0,
           "move": "down",
+          "correct": true,
+          "letter": "B",
+          "crop_origin": [
+            336,
+            0
+          ]
+        },
+        {
+          "kind": "move right",
+          "frame": 0,
+          "orient": 0,
+          "move": "right",
           "correct": false,
-          "letter": "B"
+          "letter": "C",
+          "crop_origin": [
+            96,
+            150
+          ]
         },
         {
           "kind": "move left",
@@ -1585,25 +2163,71 @@
           "orient": 0,
           "move": "left",
           "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "move up",
-          "frame": 0,
-          "orient": 0,
-          "move": "up",
-          "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            576,
+            150
+          ]
         }
       ],
-      "answer": "A"
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              196,
+              188
+            ],
+            [
+              196,
+              38
+            ]
+          ],
+          [
+            [
+              374,
+              150
+            ],
+            [
+              374,
+              0
+            ]
+          ],
+          [
+            [
+              420,
+              262
+            ],
+            [
+              420,
+              112
+            ]
+          ]
+        ],
+        "query": [
+          336,
+          150
+        ]
+      },
+      "answer": "B"
     },
-    "T09": {
+    "T06": {
       "task": "translation",
       "rule": {
         "move": "down"
       },
       "demos": [
+        {
+          "object": "car_18",
+          "before": {
+            "frame": 447,
+            "orient": 180
+          },
+          "after": {
+            "frame": 447,
+            "orient": 180,
+            "move": "down"
+          }
+        },
         {
           "object": "truck_28",
           "before": {
@@ -1627,16 +2251,557 @@
             "orient": 90,
             "move": "down"
           }
+        }
+      ],
+      "query": {
+        "object": "duck_12",
+        "frame": 632,
+        "orient": 0
+      },
+      "candidates": [
+        {
+          "kind": "move down",
+          "frame": 632,
+          "orient": 0,
+          "move": "down",
+          "correct": true,
+          "letter": "A",
+          "crop_origin": [
+            328,
+            0
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 632,
+          "orient": 0,
+          "move": "up",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            328,
+            300
+          ]
+        },
+        {
+          "kind": "move right",
+          "frame": 632,
+          "orient": 0,
+          "move": "right",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            88,
+            150
+          ]
+        },
+        {
+          "kind": "move left",
+          "frame": 632,
+          "orient": 0,
+          "move": "left",
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            568,
+            150
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              264,
+              150
+            ],
+            [
+              264,
+              0
+            ]
+          ],
+          [
+            [
+              263,
+              222
+            ],
+            [
+              263,
+              72
+            ]
+          ],
+          [
+            [
+              348,
+              150
+            ],
+            [
+              348,
+              0
+            ]
+          ]
+        ],
+        "query": [
+          328,
+          150
+        ]
+      },
+      "answer": "A"
+    },
+    "T07": {
+      "task": "translation",
+      "rule": {
+        "move": "right"
+      },
+      "demos": [
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 333,
+            "orient": 0
+          },
+          "after": {
+            "frame": 333,
+            "orient": 0,
+            "move": "right"
+          }
         },
         {
           "object": "duck_12",
           "before": {
-            "frame": 423,
+            "frame": 518,
+            "orient": 180
+          },
+          "after": {
+            "frame": 518,
+            "orient": 180,
+            "move": "right"
+          }
+        },
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 252,
+            "orient": 270
+          },
+          "after": {
+            "frame": 252,
+            "orient": 270,
+            "move": "right"
+          }
+        }
+      ],
+      "query": {
+        "object": "car_18",
+        "frame": 248,
+        "orient": 270
+      },
+      "candidates": [
+        {
+          "kind": "move down",
+          "frame": 248,
+          "orient": 270,
+          "move": "down",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            240,
+            0
+          ]
+        },
+        {
+          "kind": "move right",
+          "frame": 248,
+          "orient": 270,
+          "move": "right",
+          "correct": true,
+          "letter": "B",
+          "crop_origin": [
+            0,
+            150
+          ]
+        },
+        {
+          "kind": "move left",
+          "frame": 248,
+          "orient": 270,
+          "move": "left",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            480,
+            150
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 248,
+          "orient": 270,
+          "move": "up",
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            240,
+            300
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              390,
+              32
+            ],
+            [
+              150,
+              32
+            ]
+          ],
+          [
+            [
+              420,
+              262
+            ],
+            [
+              180,
+              262
+            ]
+          ],
+          [
+            [
+              263,
+              222
+            ],
+            [
+              23,
+              222
+            ]
+          ]
+        ],
+        "query": [
+          240,
+          150
+        ]
+      },
+      "answer": "B"
+    },
+    "T08": {
+      "task": "translation",
+      "rule": {
+        "move": "up"
+      },
+      "demos": [
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 465,
+            "orient": 180
+          },
+          "after": {
+            "frame": 465,
+            "orient": 180,
+            "move": "up"
+          }
+        },
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 0,
+            "orient": 0
+          },
+          "after": {
+            "frame": 0,
+            "orient": 0,
+            "move": "up"
+          }
+        },
+        {
+          "object": "car_18",
+          "before": {
+            "frame": 506,
+            "orient": 270
+          },
+          "after": {
+            "frame": 506,
+            "orient": 270,
+            "move": "up"
+          }
+        }
+      ],
+      "query": {
+        "object": "duck_12",
+        "frame": 423,
+        "orient": 90
+      },
+      "candidates": [
+        {
+          "kind": "move right",
+          "frame": 423,
+          "orient": 90,
+          "move": "right",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            6,
+            174
+          ]
+        },
+        {
+          "kind": "move down",
+          "frame": 423,
+          "orient": 90,
+          "move": "down",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            246,
+            24
+          ]
+        },
+        {
+          "kind": "move left",
+          "frame": 423,
+          "orient": 90,
+          "move": "left",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            486,
+            174
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 423,
+          "orient": 90,
+          "move": "up",
+          "correct": true,
+          "letter": "D",
+          "crop_origin": [
+            246,
+            324
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              338,
+              94
+            ],
+            [
+              338,
+              244
+            ]
+          ],
+          [
+            [
+              368,
+              0
+            ],
+            [
+              368,
+              150
+            ]
+          ],
+          [
+            [
+              200,
+              0
+            ],
+            [
+              200,
+              150
+            ]
+          ]
+        ],
+        "query": [
+          246,
+          174
+        ]
+      },
+      "answer": "D"
+    },
+    "T09": {
+      "task": "translation",
+      "rule": {
+        "move": "left"
+      },
+      "demos": [
+        {
+          "object": "car_18",
+          "before": {
+            "frame": 248,
+            "orient": 270
+          },
+          "after": {
+            "frame": 248,
+            "orient": 270,
+            "move": "left"
+          }
+        },
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 252,
+            "orient": 270
+          },
+          "after": {
+            "frame": 252,
+            "orient": 270,
+            "move": "left"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 300,
+            "orient": 270
+          },
+          "after": {
+            "frame": 300,
+            "orient": 270,
+            "move": "left"
+          }
+        }
+      ],
+      "query": {
+        "object": "truck_24",
+        "frame": 333,
+        "orient": 0
+      },
+      "candidates": [
+        {
+          "kind": "move left",
+          "frame": 333,
+          "orient": 0,
+          "move": "left",
+          "correct": true,
+          "letter": "A",
+          "crop_origin": [
+            576,
+            150
+          ]
+        },
+        {
+          "kind": "move down",
+          "frame": 333,
+          "orient": 0,
+          "move": "down",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            336,
+            0
+          ]
+        },
+        {
+          "kind": "move right",
+          "frame": 333,
+          "orient": 0,
+          "move": "right",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            96,
+            150
+          ]
+        },
+        {
+          "kind": "move up",
+          "frame": 333,
+          "orient": 0,
+          "move": "up",
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            336,
+            300
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              174,
+              50
+            ],
+            [
+              414,
+              50
+            ]
+          ],
+          [
+            [
+              263,
+              222
+            ],
+            [
+              503,
+              222
+            ]
+          ],
+          [
+            [
+              336,
+              316
+            ],
+            [
+              576,
+              316
+            ]
+          ]
+        ],
+        "query": [
+          336,
+          150
+        ]
+      },
+      "answer": "A"
+    },
+    "RT00": {
+      "task": "rotation+translation",
+      "rule": {
+        "rotation_deg_ccw": 90,
+        "move": "down"
+      },
+      "demos": [
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 618,
+            "orient": 0
+          },
+          "after": {
+            "frame": 402,
+            "orient": 90,
+            "move": "down"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 216,
+            "orient": 180
+          },
+          "after": {
+            "frame": 590,
+            "orient": 270,
+            "move": "down"
+          }
+        },
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 72,
             "orient": 90
           },
           "after": {
-            "frame": 423,
-            "orient": 90,
+            "frame": 165,
+            "orient": 180,
             "move": "down"
           }
         }
@@ -1648,123 +2813,92 @@
       },
       "candidates": [
         {
-          "kind": "move left",
-          "frame": 186,
-          "orient": 180,
-          "move": "left",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move down",
-          "frame": 186,
+          "kind": "move only",
+          "frame": 447,
           "orient": 180,
           "move": "down",
-          "correct": true,
-          "letter": "B"
-        },
-        {
-          "kind": "move right",
-          "frame": 186,
-          "orient": 180,
-          "move": "right",
           "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "move up",
-          "frame": 186,
-          "orient": 180,
-          "move": "up",
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "B"
-    },
-    "RT00": {
-      "task": "rotation+translation",
-      "rule": {
-        "rotation_deg_ccw": 90,
-        "move": "left"
-      },
-      "demos": [
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 252,
-            "orient": 270
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "left"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 81,
-            "orient": 90
-          },
-          "after": {
-            "frame": 174,
-            "orient": 180,
-            "move": "left"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 108,
-            "orient": 90,
-            "move": "left"
-          }
-        }
-      ],
-      "query": {
-        "object": "duck_12",
-        "frame": 216,
-        "orient": 180
-      },
-      "candidates": [
-        {
-          "kind": "move only",
-          "frame": 518,
-          "orient": 180,
-          "move": "left",
-          "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            264,
+            0
+          ]
         },
         {
           "kind": "rotate + move (correct)",
-          "frame": 590,
+          "frame": 248,
           "orient": 270,
-          "move": "left",
+          "move": "down",
           "correct": true,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            174,
+            4
+          ]
         },
         {
           "kind": "rotate the other way + move",
-          "frame": 423,
+          "frame": 108,
           "orient": 90,
-          "move": "left",
+          "move": "down",
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            76,
+            18
+          ]
         },
         {
           "kind": "rotate only",
-          "frame": 590,
+          "frame": 248,
           "orient": 270,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            174,
+            154
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              452,
+              190
+            ],
+            [
+              374,
+              0
+            ]
+          ],
+          [
+            [
+              400,
+              290
+            ],
+            [
+              496,
+              92
+            ]
+          ],
+          [
+            [
+              268,
+              70
+            ],
+            [
+              353,
+              0
+            ]
+          ]
+        ],
+        "query": [
+          196,
+          292
+        ]
+      },
       "answer": "B"
     },
     "RT01": {
@@ -1777,164 +2911,272 @@
         {
           "object": "duck_12",
           "before": {
-            "frame": 518,
+            "frame": 216,
             "orient": 180
           },
           "after": {
             "frame": 138,
             "orient": 90,
             "move": "right"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 506,
-            "orient": 270
-          },
-          "after": {
-            "frame": 447,
-            "orient": 180,
-            "move": "right"
-          }
-        },
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 252,
-            "orient": 270,
-            "move": "right"
-          }
-        }
-      ],
-      "query": {
-        "object": "truck_24",
-        "frame": 333,
-        "orient": 0
-      },
-      "candidates": [
-        {
-          "kind": "rotate the other way + move",
-          "frame": 81,
-          "orient": 90,
-          "move": "right",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move only",
-          "frame": 618,
-          "orient": 0,
-          "move": "right",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "rotate + move (correct)",
-          "frame": 534,
-          "orient": 270,
-          "move": "right",
-          "correct": true,
-          "letter": "C"
-        },
-        {
-          "kind": "rotate only",
-          "frame": 534,
-          "orient": 270,
-          "move": null,
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "C"
-    },
-    "RT02": {
-      "task": "rotation+translation",
-      "rule": {
-        "rotation_deg_ccw": 90,
-        "move": "up"
-      },
-      "demos": [
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 138,
-            "orient": 90,
-            "move": "up"
           }
         },
         {
           "object": "truck_24",
           "before": {
-            "frame": 81,
-            "orient": 90
+            "frame": 534,
+            "orient": 270
           },
           "after": {
-            "frame": 174,
+            "frame": 465,
             "orient": 180,
-            "move": "up"
+            "move": "right"
           }
         },
         {
           "object": "car_18",
           "before": {
-            "frame": 447,
-            "orient": 180
+            "frame": 0,
+            "orient": 0
           },
           "after": {
-            "frame": 506,
+            "frame": 248,
             "orient": 270,
-            "move": "up"
+            "move": "right"
           }
         }
       ],
       "query": {
         "object": "truck_28",
-        "frame": 0,
-        "orient": 0
+        "frame": 72,
+        "orient": 90
+      },
+      "candidates": [
+        {
+          "kind": "rotate the other way + move",
+          "frame": 165,
+          "orient": 180,
+          "move": "right",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            113,
+            135
+          ]
+        },
+        {
+          "kind": "move only",
+          "frame": 72,
+          "orient": 90,
+          "move": "right",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            28,
+            55
+          ]
+        },
+        {
+          "kind": "rotate + move (correct)",
+          "frame": 0,
+          "orient": 0,
+          "move": "right",
+          "correct": true,
+          "letter": "C",
+          "crop_origin": [
+            128,
+            0
+          ]
+        },
+        {
+          "kind": "rotate only",
+          "frame": 0,
+          "orient": 0,
+          "move": null,
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            368,
+            0
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              400,
+              290
+            ],
+            [
+              76,
+              114
+            ]
+          ],
+          [
+            [
+              514,
+              116
+            ],
+            [
+              98,
+              94
+            ]
+          ],
+          [
+            [
+              108,
+              58
+            ],
+            [
+              0,
+              50
+            ]
+          ]
+        ],
+        "query": [
+          268,
+          55
+        ]
+      },
+      "answer": "C"
+    },
+    "RT02": {
+      "task": "rotation+translation",
+      "rule": {
+        "rotation_deg_ccw": -90,
+        "move": "down"
+      },
+      "demos": [
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 165,
+            "orient": 180
+          },
+          "after": {
+            "frame": 72,
+            "orient": 90,
+            "move": "down"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 357,
+            "orient": 0
+          },
+          "after": {
+            "frame": 590,
+            "orient": 270,
+            "move": "down"
+          }
+        },
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 255,
+            "orient": 270
+          },
+          "after": {
+            "frame": 174,
+            "orient": 180,
+            "move": "down"
+          }
+        }
+      ],
+      "query": {
+        "object": "car_18",
+        "frame": 108,
+        "orient": 90
       },
       "candidates": [
         {
           "kind": "rotate + move (correct)",
-          "frame": 72,
-          "orient": 90,
-          "move": "up",
+          "frame": 0,
+          "orient": 0,
+          "move": "down",
           "correct": true,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            42,
+            0
+          ]
         },
         {
           "kind": "move only",
-          "frame": 0,
-          "orient": 0,
-          "move": "up",
+          "frame": 108,
+          "orient": 90,
+          "move": "down",
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            76,
+            6
+          ]
         },
         {
           "kind": "rotate only",
-          "frame": 72,
-          "orient": 90,
+          "frame": 0,
+          "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            42,
+            150
+          ]
         },
         {
           "kind": "rotate the other way + move",
-          "frame": 252,
-          "orient": 270,
-          "move": "up",
+          "frame": 186,
+          "orient": 180,
+          "move": "down",
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            196,
+            130
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              353,
+              230
+            ],
+            [
+              268,
+              0
+            ]
+          ],
+          [
+            [
+              348,
+              0
+            ],
+            [
+              496,
+              92
+            ]
+          ],
+          [
+            [
+              416,
+              78
+            ],
+            [
+              316,
+              18
+            ]
+          ]
+        ],
+        "query": [
+          76,
+          156
+        ]
+      },
       "answer": "A"
     },
     "RT03": {
@@ -1947,23 +3189,23 @@
         {
           "object": "car_18",
           "before": {
-            "frame": 614,
-            "orient": 0
+            "frame": 506,
+            "orient": 270
           },
           "after": {
-            "frame": 108,
-            "orient": 90,
+            "frame": 0,
+            "orient": 0,
             "move": "right"
           }
         },
         {
           "object": "duck_12",
           "before": {
-            "frame": 423,
+            "frame": 138,
             "orient": 90
           },
           "after": {
-            "frame": 518,
+            "frame": 216,
             "orient": 180,
             "move": "right"
           }
@@ -1971,12 +3213,12 @@
         {
           "object": "truck_24",
           "before": {
-            "frame": 534,
-            "orient": 270
+            "frame": 465,
+            "orient": 180
           },
           "after": {
-            "frame": 0,
-            "orient": 0,
+            "frame": 255,
+            "orient": 270,
             "move": "right"
           }
         }
@@ -1993,7 +3235,11 @@
           "orient": 270,
           "move": "right",
           "correct": false,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            23,
+            265
+          ]
         },
         {
           "kind": "rotate + move (correct)",
@@ -2001,7 +3247,11 @@
           "orient": 0,
           "move": "right",
           "correct": true,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            128,
+            0
+          ]
         },
         {
           "kind": "rotate the other way + move",
@@ -2009,7 +3259,11 @@
           "orient": 180,
           "move": "right",
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            113,
+            135
+          ]
         },
         {
           "kind": "rotate only",
@@ -2017,12 +3271,332 @@
           "orient": 0,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            368,
+            0
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              398,
+              0
+            ],
+            [
+              0,
+              126
+            ]
+          ],
+          [
+            [
+              316,
+              114
+            ],
+            [
+              160,
+              290
+            ]
+          ],
+          [
+            [
+              338,
+              94
+            ],
+            [
+              176,
+              78
+            ]
+          ]
+        ],
+        "query": [
+          263,
+          265
+        ]
+      },
       "answer": "B"
     },
     "RT04": {
+      "task": "rotation+translation",
+      "rule": {
+        "rotation_deg_ccw": 90,
+        "move": "right"
+      },
+      "demos": [
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 252,
+            "orient": 270
+          },
+          "after": {
+            "frame": 0,
+            "orient": 0,
+            "move": "right"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 423,
+            "orient": 90
+          },
+          "after": {
+            "frame": 518,
+            "orient": 180,
+            "move": "right"
+          }
+        },
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 174,
+            "orient": 180
+          },
+          "after": {
+            "frame": 534,
+            "orient": 270,
+            "move": "right"
+          }
+        }
+      ],
+      "query": {
+        "object": "car_18",
+        "frame": 248,
+        "orient": 270
+      },
+      "candidates": [
+        {
+          "kind": "rotate + move (correct)",
+          "frame": 315,
+          "orient": 0,
+          "move": "right",
+          "correct": true,
+          "letter": "A",
+          "crop_origin": [
+            16,
+            88
+          ]
+        },
+        {
+          "kind": "move only",
+          "frame": 506,
+          "orient": 270,
+          "move": "right",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            0,
+            0
+          ]
+        },
+        {
+          "kind": "rotate the other way + move",
+          "frame": 447,
+          "orient": 180,
+          "move": "right",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            64,
+            114
+          ]
+        },
+        {
+          "kind": "rotate only",
+          "frame": 315,
+          "orient": 0,
+          "move": null,
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            256,
+            88
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              263,
+              265
+            ],
+            [
+              128,
+              0
+            ]
+          ],
+          [
+            [
+              246,
+              238
+            ],
+            [
+              180,
+              262
+            ]
+          ],
+          [
+            [
+              316,
+              168
+            ],
+            [
+              274,
+              116
+            ]
+          ]
+        ],
+        "query": [
+          214,
+          118
+        ]
+      },
+      "answer": "A"
+    },
+    "RT05": {
+      "task": "rotation+translation",
+      "rule": {
+        "rotation_deg_ccw": -90,
+        "move": "up"
+      },
+      "demos": [
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 518,
+            "orient": 180
+          },
+          "after": {
+            "frame": 138,
+            "orient": 90,
+            "move": "up"
+          }
+        },
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 402,
+            "orient": 90
+          },
+          "after": {
+            "frame": 333,
+            "orient": 0,
+            "move": "up"
+          }
+        },
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 252,
+            "orient": 270
+          },
+          "after": {
+            "frame": 165,
+            "orient": 180,
+            "move": "up"
+          }
+        }
+      ],
+      "query": {
+        "object": "car_18",
+        "frame": 315,
+        "orient": 0
+      },
+      "candidates": [
+        {
+          "kind": "rotate the other way + move",
+          "frame": 108,
+          "orient": 90,
+          "move": "up",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            76,
+            282
+          ]
+        },
+        {
+          "kind": "rotate only",
+          "frame": 506,
+          "orient": 270,
+          "move": null,
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            200,
+            0
+          ]
+        },
+        {
+          "kind": "move only",
+          "frame": 315,
+          "orient": 0,
+          "move": "up",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            216,
+            238
+          ]
+        },
+        {
+          "kind": "rotate + move (correct)",
+          "frame": 506,
+          "orient": 270,
+          "move": "up",
+          "correct": true,
+          "letter": "D",
+          "crop_origin": [
+            200,
+            150
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              420,
+              262
+            ],
+            [
+              316,
+              264
+            ]
+          ],
+          [
+            [
+              374,
+              34
+            ],
+            [
+              390,
+              182
+            ]
+          ],
+          [
+            [
+              263,
+              222
+            ],
+            [
+              353,
+              242
+            ]
+          ]
+        ],
+        "query": [
+          216,
+          88
+        ]
+      },
+      "answer": "D"
+    },
+    "RT06": {
       "task": "rotation+translation",
       "rule": {
         "rotation_deg_ccw": -90,
@@ -2030,14 +3604,153 @@
       },
       "demos": [
         {
+          "object": "car_18",
+          "before": {
+            "frame": 186,
+            "orient": 180
+          },
+          "after": {
+            "frame": 108,
+            "orient": 90,
+            "move": "left"
+          }
+        },
+        {
           "object": "truck_28",
           "before": {
+            "frame": 72,
+            "orient": 90
+          },
+          "after": {
             "frame": 0,
+            "orient": 0,
+            "move": "left"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 300,
+            "orient": 270
+          },
+          "after": {
+            "frame": 518,
+            "orient": 180,
+            "move": "left"
+          }
+        }
+      ],
+      "query": {
+        "object": "truck_24",
+        "frame": 0,
+        "orient": 0
+      },
+      "candidates": [
+        {
+          "kind": "move only",
+          "frame": 618,
+          "orient": 0,
+          "move": "left",
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            576,
+            74
+          ]
+        },
+        {
+          "kind": "rotate only",
+          "frame": 255,
+          "orient": 270,
+          "move": null,
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            300,
+            78
+          ]
+        },
+        {
+          "kind": "rotate + move (correct)",
+          "frame": 255,
+          "orient": 270,
+          "move": "left",
+          "correct": true,
+          "letter": "C",
+          "crop_origin": [
+            540,
+            78
+          ]
+        },
+        {
+          "kind": "rotate the other way + move",
+          "frame": 402,
+          "orient": 90,
+          "move": "left",
+          "correct": false,
+          "letter": "D",
+          "crop_origin": [
+            498,
+            34
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              196,
+              188
+            ],
+            [
+              316,
+              64
+            ]
+          ],
+          [
+            [
+              236,
+              55
+            ],
+            [
+              576,
+              0
+            ]
+          ],
+          [
+            [
+              322,
+              316
+            ],
+            [
+              576,
+              262
+            ]
+          ]
+        ],
+        "query": [
+          270,
+          314
+        ]
+      },
+      "answer": "C"
+    },
+    "RT07": {
+      "task": "rotation+translation",
+      "rule": {
+        "rotation_deg_ccw": 90,
+        "move": "left"
+      },
+      "demos": [
+        {
+          "object": "truck_24",
+          "before": {
+            "frame": 618,
             "orient": 0
           },
           "after": {
-            "frame": 252,
-            "orient": 270,
+            "frame": 402,
+            "orient": 90,
             "move": "left"
           }
         },
@@ -2048,8 +3761,147 @@
             "orient": 90
           },
           "after": {
-            "frame": 315,
+            "frame": 186,
+            "orient": 180,
+            "move": "left"
+          }
+        },
+        {
+          "object": "duck_12",
+          "before": {
+            "frame": 518,
+            "orient": 180
+          },
+          "after": {
+            "frame": 590,
+            "orient": 270,
+            "move": "left"
+          }
+        }
+      ],
+      "query": {
+        "object": "truck_28",
+        "frame": 252,
+        "orient": 270
+      },
+      "candidates": [
+        {
+          "kind": "rotate only",
+          "frame": 0,
+          "orient": 0,
+          "move": null,
+          "correct": false,
+          "letter": "A",
+          "crop_origin": [
+            336,
+            0
+          ]
+        },
+        {
+          "kind": "move only",
+          "frame": 252,
+          "orient": 270,
+          "move": "left",
+          "correct": false,
+          "letter": "B",
+          "crop_origin": [
+            471,
+            265
+          ]
+        },
+        {
+          "kind": "rotate the other way + move",
+          "frame": 165,
+          "orient": 180,
+          "move": "left",
+          "correct": false,
+          "letter": "C",
+          "crop_origin": [
+            561,
+            135
+          ]
+        },
+        {
+          "kind": "rotate + move (correct)",
+          "frame": 0,
+          "orient": 0,
+          "move": "left",
+          "correct": true,
+          "letter": "D",
+          "crop_origin": [
+            576,
+            0
+          ]
+        }
+      ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              414,
+              74
+            ],
+            [
+              576,
+              34
+            ]
+          ],
+          [
+            [
+              76,
+              64
+            ],
+            [
+              436,
+              188
+            ]
+          ],
+          [
+            [
+              260,
+              262
+            ],
+            [
+              576,
+              242
+            ]
+          ]
+        ],
+        "query": [
+          231,
+          265
+        ]
+      },
+      "answer": "D"
+    },
+    "RT08": {
+      "task": "rotation+translation",
+      "rule": {
+        "rotation_deg_ccw": 90,
+        "move": "left"
+      },
+      "demos": [
+        {
+          "object": "truck_28",
+          "before": {
+            "frame": 252,
+            "orient": 270
+          },
+          "after": {
+            "frame": 0,
             "orient": 0,
+            "move": "left"
+          }
+        },
+        {
+          "object": "car_18",
+          "before": {
+            "frame": 108,
+            "orient": 90
+          },
+          "after": {
+            "frame": 186,
+            "orient": 180,
             "move": "left"
           }
         },
@@ -2060,8 +3912,8 @@
             "orient": 180
           },
           "after": {
-            "frame": 138,
-            "orient": 90,
+            "frame": 590,
+            "orient": 270,
             "move": "left"
           }
         }
@@ -2073,463 +3925,231 @@
       },
       "candidates": [
         {
-          "kind": "rotate + move (correct)",
-          "frame": 0,
-          "orient": 0,
-          "move": "left",
-          "correct": true,
-          "letter": "A"
-        },
-        {
           "kind": "move only",
           "frame": 402,
           "orient": 90,
           "move": "left",
           "correct": false,
-          "letter": "B"
+          "letter": "A",
+          "crop_origin": [
+            564,
+            34
+          ]
         },
         {
           "kind": "rotate the other way + move",
-          "frame": 174,
-          "orient": 180,
+          "frame": 0,
+          "orient": 0,
           "move": "left",
           "correct": false,
-          "letter": "C"
+          "letter": "B",
+          "crop_origin": [
+            576,
+            314
+          ]
         },
         {
           "kind": "rotate only",
-          "frame": 0,
-          "orient": 0,
-          "move": null,
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "A"
-    },
-    "RT05": {
-      "task": "rotation+translation",
-      "rule": {
-        "rotation_deg_ccw": 90,
-        "move": "down"
-      },
-      "demos": [
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 72,
-            "orient": 90
-          },
-          "after": {
-            "frame": 165,
-            "orient": 180,
-            "move": "down"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 333,
-            "orient": 0
-          },
-          "after": {
-            "frame": 402,
-            "orient": 90,
-            "move": "down"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 248,
-            "orient": 270
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "down"
-          }
-        }
-      ],
-      "query": {
-        "object": "duck_12",
-        "frame": 423,
-        "orient": 90
-      },
-      "candidates": [
-        {
-          "kind": "rotate the other way + move",
-          "frame": 357,
-          "orient": 0,
-          "move": "down",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "rotate only",
-          "frame": 518,
+          "frame": 465,
           "orient": 180,
           "move": null,
           "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "move only",
-          "frame": 138,
-          "orient": 90,
-          "move": "down",
-          "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            288,
+            94
+          ]
         },
         {
           "kind": "rotate + move (correct)",
-          "frame": 518,
+          "frame": 465,
           "orient": 180,
-          "move": "down",
+          "move": "left",
           "correct": true,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            528,
+            94
+          ]
         }
       ],
-      "answer": "D"
-    },
-    "RT06": {
-      "task": "rotation+translation",
-      "rule": {
-        "rotation_deg_ccw": 90,
-        "move": "right"
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              231,
+              265
+            ],
+            [
+              576,
+              0
+            ]
+          ],
+          [
+            [
+              76,
+              64
+            ],
+            [
+              436,
+              188
+            ]
+          ],
+          [
+            [
+              240,
+              290
+            ],
+            [
+              576,
+              242
+            ]
+          ]
+        ],
+        "query": [
+          298,
+          70
+        ]
       },
-      "demos": [
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 72,
-            "orient": 90,
-            "move": "right"
-          }
-        },
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 300,
-            "orient": 270
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "right"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 81,
-            "orient": 90
-          },
-          "after": {
-            "frame": 465,
-            "orient": 180,
-            "move": "right"
-          }
-        }
-      ],
-      "query": {
-        "object": "car_18",
-        "frame": 108,
-        "orient": 90
-      },
-      "candidates": [
-        {
-          "kind": "move only",
-          "frame": 108,
-          "orient": 90,
-          "move": "right",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "rotate only",
-          "frame": 186,
-          "orient": 180,
-          "move": null,
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "rotate + move (correct)",
-          "frame": 186,
-          "orient": 180,
-          "move": "right",
-          "correct": true,
-          "letter": "C"
-        },
-        {
-          "kind": "rotate the other way + move",
-          "frame": 315,
-          "orient": 0,
-          "move": "right",
-          "correct": false,
-          "letter": "D"
-        }
-      ],
-      "answer": "C"
-    },
-    "RT07": {
-      "task": "rotation+translation",
-      "rule": {
-        "rotation_deg_ccw": -90,
-        "move": "up"
-      },
-      "demos": [
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 0,
-            "orient": 0
-          },
-          "after": {
-            "frame": 252,
-            "orient": 270,
-            "move": "up"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 402,
-            "orient": 90
-          },
-          "after": {
-            "frame": 333,
-            "orient": 0,
-            "move": "up"
-          }
-        },
-        {
-          "object": "car_18",
-          "before": {
-            "frame": 506,
-            "orient": 270
-          },
-          "after": {
-            "frame": 186,
-            "orient": 180,
-            "move": "up"
-          }
-        }
-      ],
-      "query": {
-        "object": "duck_12",
-        "frame": 590,
-        "orient": 270
-      },
-      "candidates": [
-        {
-          "kind": "rotate only",
-          "frame": 518,
-          "orient": 180,
-          "move": null,
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "move only",
-          "frame": 300,
-          "orient": 270,
-          "move": "up",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "rotate the other way + move",
-          "frame": 0,
-          "orient": 0,
-          "move": "up",
-          "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "rotate + move (correct)",
-          "frame": 518,
-          "orient": 180,
-          "move": "up",
-          "correct": true,
-          "letter": "D"
-        }
-      ],
-      "answer": "D"
-    },
-    "RT08": {
-      "task": "rotation+translation",
-      "rule": {
-        "rotation_deg_ccw": -90,
-        "move": "down"
-      },
-      "demos": [
-        {
-          "object": "duck_12",
-          "before": {
-            "frame": 590,
-            "orient": 270
-          },
-          "after": {
-            "frame": 518,
-            "orient": 180,
-            "move": "down"
-          }
-        },
-        {
-          "object": "truck_28",
-          "before": {
-            "frame": 72,
-            "orient": 90
-          },
-          "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "down"
-          }
-        },
-        {
-          "object": "truck_24",
-          "before": {
-            "frame": 333,
-            "orient": 0
-          },
-          "after": {
-            "frame": 534,
-            "orient": 270,
-            "move": "down"
-          }
-        }
-      ],
-      "query": {
-        "object": "car_18",
-        "frame": 248,
-        "orient": 270
-      },
-      "candidates": [
-        {
-          "kind": "move only",
-          "frame": 506,
-          "orient": 270,
-          "move": "down",
-          "correct": false,
-          "letter": "A"
-        },
-        {
-          "kind": "rotate the other way + move",
-          "frame": 315,
-          "orient": 0,
-          "move": "down",
-          "correct": false,
-          "letter": "B"
-        },
-        {
-          "kind": "rotate only",
-          "frame": 186,
-          "orient": 180,
-          "move": null,
-          "correct": false,
-          "letter": "C"
-        },
-        {
-          "kind": "rotate + move (correct)",
-          "frame": 186,
-          "orient": 180,
-          "move": "down",
-          "correct": true,
-          "letter": "D"
-        }
-      ],
       "answer": "D"
     },
     "RT09": {
       "task": "rotation+translation",
       "rule": {
         "rotation_deg_ccw": 90,
-        "move": "left"
+        "move": "up"
       },
       "demos": [
         {
-          "object": "car_18",
+          "object": "truck_24",
           "before": {
-            "frame": 506,
-            "orient": 270
+            "frame": 402,
+            "orient": 90
           },
           "after": {
-            "frame": 0,
-            "orient": 0,
-            "move": "left"
+            "frame": 465,
+            "orient": 180,
+            "move": "up"
           }
         },
         {
           "object": "truck_28",
           "before": {
-            "frame": 0,
-            "orient": 0
+            "frame": 252,
+            "orient": 270
           },
           "after": {
-            "frame": 72,
-            "orient": 90,
-            "move": "left"
+            "frame": 0,
+            "orient": 0,
+            "move": "up"
           }
         },
         {
           "object": "duck_12",
           "before": {
-            "frame": 423,
-            "orient": 90
+            "frame": 518,
+            "orient": 180
           },
           "after": {
-            "frame": 216,
-            "orient": 180,
-            "move": "left"
+            "frame": 300,
+            "orient": 270,
+            "move": "up"
           }
         }
       ],
       "query": {
-        "object": "truck_24",
-        "frame": 465,
-        "orient": 180
+        "object": "car_18",
+        "frame": 315,
+        "orient": 0
       },
       "candidates": [
         {
           "kind": "rotate + move (correct)",
-          "frame": 255,
-          "orient": 270,
-          "move": "left",
+          "frame": 108,
+          "orient": 90,
+          "move": "up",
           "correct": true,
-          "letter": "A"
+          "letter": "A",
+          "crop_origin": [
+            76,
+            214
+          ]
         },
         {
           "kind": "rotate the other way + move",
-          "frame": 81,
-          "orient": 90,
-          "move": "left",
+          "frame": 506,
+          "orient": 270,
+          "move": "up",
           "correct": false,
-          "letter": "B"
+          "letter": "B",
+          "crop_origin": [
+            200,
+            82
+          ]
         },
         {
           "kind": "move only",
-          "frame": 174,
-          "orient": 180,
-          "move": "left",
+          "frame": 315,
+          "orient": 0,
+          "move": "up",
           "correct": false,
-          "letter": "C"
+          "letter": "C",
+          "crop_origin": [
+            216,
+            170
+          ]
         },
         {
           "kind": "rotate only",
-          "frame": 255,
-          "orient": 270,
+          "frame": 108,
+          "orient": 90,
           "move": null,
           "correct": false,
-          "letter": "D"
+          "letter": "D",
+          "crop_origin": [
+            76,
+            64
+          ]
         }
       ],
+      "crop_origins": {
+        "demos": [
+          [
+            [
+              374,
+              34
+            ],
+            [
+              338,
+              244
+            ]
+          ],
+          [
+            [
+              263,
+              222
+            ],
+            [
+              368,
+              107
+            ]
+          ],
+          [
+            [
+              420,
+              120
+            ],
+            [
+              406,
+              324
+            ]
+          ]
+        ],
+        "query": [
+          216,
+          20
+        ]
+      },
       "answer": "A"
     }
   }

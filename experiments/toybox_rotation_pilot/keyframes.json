@@ -1,9 +1,219 @@
 {
-  "note": "Visually checked keyframes at roughly 0/90/180/270 degrees counter-clockwise relative to the first frame of each Toybox ry video (proposed by orient.py, checked on contact sheets; tilted frames removed). Approximate: about +-15 degrees.",
-  "objects": {
-    "car_18":   {"video": "car_18_pivothead_ryminus.mp4",   "frames": {"0": [0, 315, 614], "90": [108], "180": [186, 447], "270": [248, 506]}},
-    "truck_24": {"video": "truck_24_pivothead_ryminus.mp4", "frames": {"0": [0, 333, 618], "90": [81, 402], "180": [174, 465], "270": [255, 534]}},
-    "truck_28": {"video": "truck_28_pivothead_ryminus.mp4", "frames": {"0": [0], "90": [72], "180": [165], "270": [252]}},
-    "duck_12":  {"video": "duck_12_pivothead_ryminus.mp4",  "frames": {"0": [0, 357, 632], "90": [138, 423], "180": [216, 518], "270": [300, 590]}}
+ "note": "Visually checked keyframes at roughly 0/90/180/270 degrees counter-clockwise relative to the first frame of each Toybox ry video (proposed by orient.py, checked on contact sheets; tilted frames removed). Approximate: about +-15 degrees. 'centers' = object centre in full-frame pixels (x, y), used to place crops so the object's displacement equals the intended one.",
+ "objects": {
+  "car_18": {
+   "video": "car_18_pivothead_ryminus.mp4",
+   "frames": {
+    "0": [
+     0,
+     315,
+     614
+    ],
+    "90": [
+     108
+    ],
+    "180": [
+     186,
+     447
+    ],
+    "270": [
+     248,
+     506
+    ]
+   },
+   "centers": {
+    "0": [
+     714,
+     436
+    ],
+    "315": [
+     888,
+     398
+    ],
+    "614": [
+     762,
+     542
+    ],
+    "108": [
+     748,
+     442
+    ],
+    "186": [
+     868,
+     566
+    ],
+    "447": [
+     936,
+     424
+    ],
+    "248": [
+     846,
+     428
+    ],
+    "506": [
+     872,
+     310
+    ]
+   },
+   "center_method": "automatic (locate.py), visually checked"
+  },
+  "truck_24": {
+   "video": "truck_24_pivothead_ryminus.mp4",
+   "frames": {
+    "0": [
+     0,
+     333,
+     618
+    ],
+    "90": [
+     81,
+     402
+    ],
+    "180": [
+     174,
+     465
+    ],
+    "270": [
+     255,
+     534
+    ]
+   },
+   "centers": {
+    "0": [
+     1058,
+     692
+    ],
+    "333": [
+     1062,
+     410
+    ],
+    "618": [
+     1124,
+     452
+    ],
+    "81": [
+     1020,
+     448
+    ],
+    "402": [
+     1046,
+     412
+    ],
+    "174": [
+     988,
+     546
+    ],
+    "465": [
+     1010,
+     472
+    ],
+    "255": [
+     1088,
+     456
+    ],
+    "534": [
+     1186,
+     494
+    ]
+   },
+   "center_method": "automatic (locate.py), visually checked"
+  },
+  "truck_28": {
+   "video": "truck_28_pivothead_ryminus.mp4",
+   "frames": {
+    "0": [
+     0
+    ],
+    "90": [
+     72
+    ],
+    "180": [
+     165
+    ],
+    "270": [
+     252
+    ]
+   },
+   "centers": {
+    "0": [
+     1040,
+     335
+    ],
+    "72": [
+     940,
+     390
+    ],
+    "165": [
+     1025,
+     470
+    ],
+    "252": [
+     935,
+     600
+    ]
+   },
+   "center_method": "manual (read off a pixel grid; body without the tow rope)"
+  },
+  "duck_12": {
+   "video": "duck_12_pivothead_ryminus.mp4",
+   "frames": {
+    "0": [
+     0,
+     357,
+     632
+    ],
+    "90": [
+     138,
+     423
+    ],
+    "180": [
+     216,
+     518
+    ],
+    "270": [
+     300,
+     590
+    ]
+   },
+   "centers": {
+    "0": [
+     1068,
+     364
+    ],
+    "357": [
+     1020,
+     378
+    ],
+    "632": [
+     1000,
+     352
+    ],
+    "138": [
+     988,
+     492
+    ],
+    "423": [
+     918,
+     616
+    ],
+    "216": [
+     1072,
+     668
+    ],
+    "518": [
+     1092,
+     640
+    ],
+    "300": [
+     1078,
+     694
+    ],
+    "590": [
+     1168,
+     620
+    ]
+   },
+   "center_method": "automatic (locate.py), visually checked"
   }
+ }
 }
