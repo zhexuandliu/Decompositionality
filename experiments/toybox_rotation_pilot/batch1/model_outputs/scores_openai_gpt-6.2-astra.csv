@@ -1,0 +1,61 @@
+qid,task,rule,answer,choice,correct,chosen_kind,reasoning_tokens,cost,raw
+M00,mirror,"{""mirror"": ""left-right""}",D,D,True,mirror left-right (correct),0,0.045694,D
+M01,mirror,"{""mirror"": ""left-right""}",A,A,True,mirror left-right (correct),0,0.045694,A
+M02,mirror,"{""mirror"": ""left-right""}",A,A,True,mirror left-right (correct),0,0.045694,A
+M03,mirror,"{""mirror"": ""left-right""}",B,B,True,mirror left-right (correct),0,0.045694,B
+M04,mirror,"{""mirror"": ""left-right""}",D,D,True,mirror left-right (correct),0,0.045694,D
+M05,mirror,"{""mirror"": ""left-right""}",C,C,True,mirror left-right (correct),0,0.045694,C
+M06,mirror,"{""mirror"": ""left-right""}",C,C,True,mirror left-right (correct),0,0.03833,C
+M07,mirror,"{""mirror"": ""left-right""}",B,B,True,mirror left-right (correct),0,0.03833,B
+M08,mirror,"{""mirror"": ""left-right""}",A,A,True,mirror left-right (correct),0,0.045694,A
+M09,mirror,"{""mirror"": ""left-right""}",B,B,True,mirror left-right (correct),0,0.045694,B
+R00,rotation,"{""rotation_deg_ccw"": -90}",C,C,True,rotate 270,0,0.045694,C
+R01,rotation,"{""rotation_deg_ccw"": 180}",B,B,True,rotate 180,0,0.03833,B
+R02,rotation,"{""rotation_deg_ccw"": -90}",A,A,True,rotate 270,0,0.03833,A
+R03,rotation,"{""rotation_deg_ccw"": 180}",B,B,True,rotate 180,0,0.03833,B
+R04,rotation,"{""rotation_deg_ccw"": 90}",D,D,True,rotate 90,14,0.046334,D
+R05,rotation,"{""rotation_deg_ccw"": -90}",D,D,True,rotate 270,0,0.045694,D
+R06,rotation,"{""rotation_deg_ccw"": 180}",D,D,True,rotate 180,0,0.03833,D
+R07,rotation,"{""rotation_deg_ccw"": 90}",D,D,True,rotate 90,0,0.03833,D
+R08,rotation,"{""rotation_deg_ccw"": 90}",A,A,True,rotate 90,0,0.03833,A
+R09,rotation,"{""rotation_deg_ccw"": 90}",B,B,True,rotate 90,21,0.046614,B
+RM00,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",B,B,True,rotate + mirror (correct),180,0.04561,B
+RM01,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",B,B,True,rotate + mirror (correct),67,0.048454,B
+RM02,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",A,A,True,rotate + mirror (correct),495,0.065574,A
+RM03,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",D,D,True,rotate + mirror (correct),208,0.054094,D
+RM04,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",D,D,True,rotate + mirror (correct),78,0.048894,D
+RM05,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",A,A,True,rotate + mirror (correct),63,0.048294,A
+RM06,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",C,C,True,rotate + mirror (correct),95,0.04221,C
+RM07,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",A,D,False,rotate only,20,0.03921,D
+RM08,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",B,B,True,rotate + mirror (correct),84,0.04177,B
+RM09,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",C,C,True,rotate + mirror (correct),92,0.04209,C
+RT00,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""down""}",B,B,True,rotate + move (correct),46,0.047614,B
+RT01,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""left""}",C,C,True,rotate + move (correct),15,0.046374,C
+RT02,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""right""}",A,A,True,rotate + move (correct),0,0.03833,A
+RT03,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""right""}",B,B,True,rotate + move (correct),12,0.03889,B
+RT04,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""down""}",A,A,True,rotate + move (correct),156,0.04465,A
+RT05,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""left""}",D,D,True,rotate + move (correct),13,0.03893,D
+RT06,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""up""}",C,C,True,rotate + move (correct),464,0.064334,C
+RT07,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""left""}",D,D,True,rotate + move (correct),12,0.03889,D
+RT08,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""right""}",D,D,True,rotate + move (correct),13,0.046294,D
+RT09,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""up""}",A,A,True,rotate + move (correct),15,0.03901,A
+T00,translation,"{""move"": ""left""}",B,B,True,move left,0,0.045694,B
+T01,translation,"{""move"": ""right""}",B,B,True,move right,0,0.045694,B
+T02,translation,"{""move"": ""right""}",A,A,True,move right,0,0.045694,A
+T03,translation,"{""move"": ""up""}",D,D,True,move up,0,0.045694,D
+T04,translation,"{""move"": ""left""}",C,C,True,move left,0,0.045694,C
+T05,translation,"{""move"": ""down""}",B,B,True,move down,0,0.045694,B
+T06,translation,"{""move"": ""down""}",A,A,True,move down,0,0.045694,A
+T07,translation,"{""move"": ""right""}",B,B,True,move right,0,0.03833,B
+T08,translation,"{""move"": ""up""}",D,D,True,move up,0,0.03833,D
+T09,translation,"{""move"": ""left""}",A,A,True,move left,0,0.045694,A
+TM00,translation+mirror,"{""move"": ""up"", ""mirror"": ""left-right""}",B,B,True,mirror + move (correct),0,0.03833,B
+TM01,translation+mirror,"{""move"": ""down"", ""mirror"": ""left-right""}",A,A,True,mirror + move (correct),0,0.045694,A
+TM02,translation+mirror,"{""move"": ""right"", ""mirror"": ""left-right""}",D,D,True,mirror + move (correct),29,0.046934,D
+TM03,translation+mirror,"{""move"": ""left"", ""mirror"": ""left-right""}",D,D,True,mirror + move (correct),44,0.047534,D
+TM04,translation+mirror,"{""move"": ""down"", ""mirror"": ""left-right""}",B,B,True,mirror + move (correct),0,0.045694,B
+TM05,translation+mirror,"{""move"": ""right"", ""mirror"": ""left-right""}",A,A,True,mirror + move (correct),14,0.046334,A
+TM06,translation+mirror,"{""move"": ""left"", ""mirror"": ""left-right""}",B,B,True,mirror + move (correct),65,0.048374,B
+TM07,translation+mirror,"{""move"": ""up"", ""mirror"": ""left-right""}",A,A,True,mirror + move (correct),0,0.045694,A
+TM08,translation+mirror,"{""move"": ""left"", ""mirror"": ""left-right""}",C,C,True,mirror + move (correct),66,0.048414,C
+TM09,translation+mirror,"{""move"": ""right"", ""mirror"": ""left-right""}",C,C,True,mirror + move (correct),101,0.04245,C
