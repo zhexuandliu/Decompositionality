@@ -27,7 +27,8 @@ objects, 1 query image of a 4th object, 4 candidates, "Answer with exactly one l
 | `TM` translation + mirror | 10 | left-right mirror plus a shift | correct, mirror only, shift only, top-bottom mirror + shift |
 
 The questions are already in the repository (`experiments/toybox_rotation_pilot/batch1/`). Answers live in
-`batch1/answers.json` and are only read when scoring. One call per question (60 calls, about 5 cents). Re-running
+`batch1/answers.json` and are only read when scoring. One call per question and model. GPT-6 Luna has already been run (results in `batch1/results/`); this run calls
+`meta/muse-glimmer-30b` (60 calls; Muse reasons at length, so expect roughly $1-3). Re-running
 skips questions that already have a successful response.
 
 Needs the Colab secrets `GITHUB_TOKEN` and `OPENROUTER_API_KEY` (never printed).
@@ -58,29 +59,49 @@ for qid in ["R00", "T00", "RT00", "M00", "RM00", "TM00"]:
     print(qid); display(_Img(filename=str(BATCH / qid / "composite.jpg"), width=900))
 '''
 
-CALL = r'''# --- 5. Calls: one per question (resumable) ------------------------------------------------------------------------
+CALL = r'''# --- 5. Calls: one per question and model (resumable) -----------------------------------------------------------------
 if IN_COLAB and not os.environ.get("OPENROUTER_API_KEY"):
     from google.colab import userdata
     os.environ["OPENROUTER_API_KEY"] = userdata.get("OPENROUTER_API_KEY")      # never printed
-MODEL = "openai/gpt-6-luna"
-r = subprocess.run([sys.executable, str(PILOT / "eval_batch.py"), "--batch", str(BATCH), "--model", MODEL, "--workers", "8"],
-                   capture_output=True, text=True, cwd=str(PILOT))
-print(r.stdout[-6000:]); print(r.stderr[-3000:])
+# model -> output-token cap (None = provider default). Muse reasons for a long time and its provider default (16384)
+# truncated answers in notebook 52, so it gets a larger cap.
+MODELS = {"openai/gpt-6-luna": None, "meta/muse-glimmer-30b": 48000}
+RUN = ["meta/muse-glimmer-30b"]          # which models to call now (Luna was already run: results in batch1/results/)
+for MODEL in RUN:
+    cmd = [sys.executable, str(PILOT / "eval_batch.py"), "--batch", str(BATCH), "--model", MODEL, "--workers", "8"]
+    if MODELS[MODEL]:
+        cmd += ["--max-tokens", str(MODELS[MODEL])]
+    r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(PILOT))
+    print(f"===== {MODEL}"); print(r.stdout[-6000:]); print(r.stderr[-3000:])
 '''
 
-REPORT = r'''# --- 6. Results and download -------------------------------------------------------------------------------------
-import pandas as pd, shutil
-pd.set_option("display.width", 200); pd.set_option("display.max_colwidth", 60)
-df = pd.read_csv(BATCH / f"scores_{MODEL.replace('/', '_')}.csv")
-print(df.groupby("task").correct.agg(["mean", "sum", "size"]))
-print("\nWhat was chosen when wrong:"); print(df[~df.correct].groupby(["task", "chosen_kind"]).size())
-display(df[["qid", "task", "rule", "answer", "choice", "correct", "chosen_kind", "reasoning_tokens", "cost"]])
-print("total cost $", round(pd.to_numeric(df.cost, errors="coerce").sum(), 4))
+REPORT = r'''# --- 6. Results (all models with responses) and download ------------------------------------------------------------
+import pandas as pd, shutil, glob
+sys.path.insert(0, str(PILOT))
+from eval_batch import score
+pd.set_option("display.width", 200); pd.set_option("display.max_colwidth", 70)
+frames = []
+for f in sorted(glob.glob(str(BATCH / "responses_*.jsonl")) + glob.glob(str(BATCH / "results" / "responses_*.jsonl"))):
+    m = pathlib.Path(f).stem.replace("responses_", "")
+    if any(d.model == m for d in frames):
+        continue
+    d = score(BATCH, pathlib.Path(f)); d["model"] = m; frames.append(d)
+df = pd.concat(frames, ignore_index=True)
+df["task"] = df.qid.str.rstrip("0123456789")
+order = ["R", "T", "RT", "M", "RM", "TM"]
+print("Accuracy by task and model:")
+display(df.pivot_table(index="task", columns="model", values="correct").reindex(order).round(2))
+print("\\nWhat was chosen when wrong:")
+display(df[~df.correct].groupby(["model", "task", "chosen_kind"]).size().rename("n").reset_index())
+print("\\nInvalid answers:", df.groupby("model").choice.apply(lambda s: int(s.isna().sum())).to_dict())
+print("cost by model ($):", df.groupby("model").cost.sum().round(3).to_dict())
 if IN_COLAB:
     from google.colab import files
     out = "/content/toybox_batch1_results"
-    os.makedirs(out, exist_ok=True)
-    for f in BATCH.glob("*_" + MODEL.replace("/", "_") + ".*"):
+    shutil.rmtree(out, ignore_errors=True); os.makedirs(out)
+    for f in BATCH.glob("responses_*.jsonl"):
+        shutil.copy(f, out)
+    for f in BATCH.glob("scores_*.csv"):
         shutil.copy(f, out)
     shutil.make_archive(out, "zip", out)
     files.download(out + ".zip")

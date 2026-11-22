@@ -8,6 +8,7 @@ answers.json is read only when scoring.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import threading
@@ -34,13 +35,22 @@ def call(body, key):
         return {"error": f"{type(ex).__name__}: {ex}"}
 
 
+def fingerprint(qdir: Path) -> str:
+    """Hash of the exact inputs (prompt, labels and image bytes), so a rebuilt question is never scored with an old
+    response."""
+    h = hashlib.sha256((qdir / "inputs.json").read_bytes())
+    for item in json.loads((qdir / "inputs.json").read_text())["images_in_order"]:
+        h.update((qdir / item["file"]).read_bytes())
+    return h.hexdigest()[:16]
+
+
 def score(batch: Path, out_jsonl: Path):
     import pandas as pd
     ans = json.loads((batch / "answers.json").read_text())["questions"]
     recs = {}
     for line in out_jsonl.read_text().splitlines():
         r = json.loads(line)
-        if r.get("error") is None:
+        if r.get("error") is None and (r.get("inputs_sha") is None or r["inputs_sha"] == fingerprint(batch / r["qid"])):
             recs[r["qid"]] = r
     rows = []
     for qid, r in recs.items():
@@ -59,6 +69,8 @@ def main():
     ap.add_argument("--batch", default=HERE / "batch1", type=Path)
     ap.add_argument("--model", default="openai/gpt-6-luna")
     ap.add_argument("--workers", default=8, type=int)
+    ap.add_argument("--max-tokens", default=None, type=int,
+                    help="output cap; some providers default to 16384, which truncates long-reasoning models")
     a = ap.parse_args()
     key = os.environ.get("OPENROUTER_API_KEY")
     if not key:
@@ -66,7 +78,12 @@ def main():
     out = a.batch / f"responses_{a.model.replace('/', '_')}.jsonl"
     done = set()
     if out.exists():
-        done = {json.loads(l)["qid"] for l in out.read_text().splitlines() if json.loads(l).get("error") is None}
+        for l in out.read_text().splitlines():
+            r = json.loads(l)
+            ok = r.get("error") is None and r.get("finish_reason") != "length"
+            same = r.get("inputs_sha") in (None, fingerprint(a.batch / r["qid"])) if (a.batch / r["qid"]).exists() else False
+            if ok and same:
+                done.add(r["qid"])
     qids = sorted(p.name for p in a.batch.iterdir() if (p / "inputs.json").exists())
     todo = [q for q in qids if q not in done]
     print(f"{len(done)} done, {len(todo)} to call ({a.model})")
@@ -75,7 +92,10 @@ def main():
     def one(qid):
         body = build_request(a.batch / qid)
         body["model"] = a.model
-        rec = {"qid": qid, "model_requested": a.model, "submission_format": "ordered_images_with_labels", **call(body, key)}
+        if a.max_tokens:
+            body["max_tokens"] = a.max_tokens
+        rec = {"qid": qid, "inputs_sha": fingerprint(a.batch / qid), "model_requested": a.model, "max_tokens": a.max_tokens,
+               "submission_format": "ordered_images_with_labels", **call(body, key)}
         with lock, out.open("a") as fh:
             fh.write(json.dumps(rec) + "\n")
         print(qid, rec.get("raw_response"), rec.get("error") or "", flush=True)
