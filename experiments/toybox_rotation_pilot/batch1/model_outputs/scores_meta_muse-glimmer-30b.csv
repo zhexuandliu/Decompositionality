@@ -1,0 +1,61 @@
+qid,task,rule,answer,choice,correct,chosen_kind,reasoning_tokens,cost,raw
+M00,mirror,"{""mirror"": ""left-right""}",D,A,False,mirror top-bottom,4925,0.00829967,A
+M01,mirror,"{""mirror"": ""left-right""}",A,B,False,rotate 180 (recorded),8993,0.0121875,B
+M02,mirror,"{""mirror"": ""left-right""}",A,C,False,rotate 180 (recorded),10020,0.0134199,C
+M03,mirror,"{""mirror"": ""left-right""}",B,B,True,mirror left-right (correct),3715,0.00637075,B
+M04,mirror,"{""mirror"": ""left-right""}",D,D,True,mirror left-right (correct),5915,0.0084939,D
+M05,mirror,"{""mirror"": ""left-right""}",C,C,True,mirror left-right (correct),4496,0.0067911,C
+M06,mirror,"{""mirror"": ""left-right""}",C,C,True,mirror left-right (correct),5470,0.0079599,C
+M07,mirror,"{""mirror"": ""left-right""}",B,B,True,mirror left-right (correct),6813,0.0095715,B
+M08,mirror,"{""mirror"": ""left-right""}",A,A,True,mirror left-right (correct),4535,0.00764417,A
+M09,mirror,"{""mirror"": ""left-right""}",B,D,False,mirror top-bottom,3060,0.00566717,D
+R00,rotation,"{""rotation_deg_ccw"": -90}",C,C,True,rotate 270,5627,0.0081483,C
+R01,rotation,"{""rotation_deg_ccw"": 180}",B,B,True,rotate 180,3240,0.00601367,B
+R02,rotation,"{""rotation_deg_ccw"": -90}",A,B,False,rotate 90,2352,0.00484067,B
+R03,rotation,"{""rotation_deg_ccw"": 180}",B,B,True,rotate 180,7468,0.01153067,B
+R04,rotation,"{""rotation_deg_ccw"": 90}",D,D,True,rotate 90,9749,0.0130947,D
+R05,rotation,"{""rotation_deg_ccw"": -90}",D,D,True,rotate 270,2405,0.00473125,D
+R06,rotation,"{""rotation_deg_ccw"": 180}",D,D,True,rotate 180,1712,0.00365725,D
+R07,rotation,"{""rotation_deg_ccw"": 90}",D,D,True,rotate 90,6343,0.0090075,D
+R08,rotation,"{""rotation_deg_ccw"": 90}",A,A,True,rotate 90,4112,0.00738467,A
+R09,rotation,"{""rotation_deg_ccw"": 90}",B,B,True,rotate 90,3086,0.00571667,B
+RM00,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",B,B,True,rotate + mirror (correct),3061,0.00573317,B
+RM01,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",B,B,True,rotate + mirror (correct),12236,0.0160791,B
+RM02,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",A,D,False,"rotate the other way + mirror (= mirror first, then rotate: wrong order)",8921,0.0121011,D
+RM03,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",D,A,False,rotate only,6659,0.01055567,A
+RM04,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",D,C,False,"rotate the other way + mirror (= mirror first, then rotate: wrong order)",8628,0.0117495,C
+RM05,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",A,B,False,"rotate the other way + mirror (= mirror first, then rotate: wrong order)",3224,0.00582321,B
+RM06,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",C,A,False,"rotate the other way + mirror (= mirror first, then rotate: wrong order)",1737,0.00392567,A
+RM07,rotation+mirror,"{""rotation_deg_ccw"": -90, ""then"": ""mirror left-right""}",A,C,False,"rotate the other way + mirror (= mirror first, then rotate: wrong order)",9702,0.0130383,C
+RM08,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",B,B,True,rotate + mirror (correct),4838,0.00802067,B
+RM09,rotation+mirror,"{""rotation_deg_ccw"": 90, ""then"": ""mirror left-right""}",C,C,True,rotate + mirror (correct),5015,0.00829521,C
+RT00,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""down""}",B,B,True,rotate + move (correct),3391,0.00618617,B
+RT01,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""left""}",C,C,True,rotate + move (correct),7693,0.0106275,C
+RT02,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""right""}",A,C,False,rotate only,7830,0.0107919,C
+RT03,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""right""}",B,B,True,rotate + move (correct),5854,0.00955967,B
+RT04,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""down""}",A,A,True,rotate + move (correct),4429,0.0067107,A
+RT05,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""left""}",D,B,False,rotate only,6163,0.0087915,B
+RT06,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""up""}",C,C,True,rotate + move (correct),11074,0.0146847,C
+RT07,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""left""}",D,C,False,rotate the other way + move,4927,0.0073083,C
+RT08,rotation+translation,"{""rotation_deg_ccw"": 90, ""move"": ""right""}",D,B,False,rotate the other way + move,8626,0.0117471,B
+RT09,rotation+translation,"{""rotation_deg_ccw"": -90, ""move"": ""up""}",A,A,True,rotate + move (correct),1958,0.00411771,A
+T00,translation,"{""move"": ""left""}",B,A,False,move down,1432,0.00340217,A
+T01,translation,"{""move"": ""right""}",B,C,False,move up,2341,0.00457967,C
+T02,translation,"{""move"": ""right""}",A,D,False,move down,2270,0.0041199,D
+T03,translation,"{""move"": ""up""}",D,D,True,move up,1690,0.00370667,D
+T04,translation,"{""move"": ""left""}",C,B,False,move right,2530,0.00476417,B
+T05,translation,"{""move"": ""down""}",B,B,True,move down,2132,0.0039543,B
+T06,translation,"{""move"": ""down""}",A,A,True,move down,2049,0.00411317,A
+T07,translation,"{""move"": ""right""}",B,C,False,move left,2085,0.00419417,C
+T08,translation,"{""move"": ""up""}",D,B,False,move down,4408,0.0066855,B
+T09,translation,"{""move"": ""left""}",A,B,False,move down,2316,0.00453467,B
+TM00,translation+mirror,"{""move"": ""up"", ""mirror"": ""left-right""}",B,B,True,mirror + move (correct),2056,0.00437867,B
+TM01,translation+mirror,"{""move"": ""down"", ""mirror"": ""left-right""}",A,A,True,mirror + move (correct),5473,0.00898217,A
+TM02,translation+mirror,"{""move"": ""right"", ""mirror"": ""left-right""}",D,B,False,mirror top-bottom + move,6611,0.01030517,B
+TM03,translation+mirror,"{""move"": ""left"", ""mirror"": ""left-right""}",D,C,False,mirror top-bottom + move,2435,0.00486317,C
+TM04,translation+mirror,"{""move"": ""down"", ""mirror"": ""left-right""}",B,C,False,mirror only,8872,0.0120423,C
+TM05,translation+mirror,"{""move"": ""right"", ""mirror"": ""left-right""}",A,A,True,mirror + move (correct),5930,0.0085119,A
+TM06,translation+mirror,"{""move"": ""left"", ""mirror"": ""left-right""}",B,B,True,mirror + move (correct),8689,0.0118227,B
+TM07,translation+mirror,"{""move"": ""up"", ""mirror"": ""left-right""}",A,A,True,mirror + move (correct),6328,0.0089895,A
+TM08,translation+mirror,"{""move"": ""left"", ""mirror"": ""left-right""}",C,A,False,mirror top-bottom + move,1412,0.00354617,A
+TM09,translation+mirror,"{""move"": ""right"", ""mirror"": ""left-right""}",C,D,False,mirror only,2883,0.00555767,D

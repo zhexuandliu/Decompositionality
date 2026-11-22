@@ -27,7 +27,7 @@ objects, 1 query image of a 4th object, 4 candidates, "Answer with exactly one l
 | `TM` translation + mirror | 10 | left-right mirror plus a shift | correct, mirror only, shift only, top-bottom mirror + shift |
 
 The questions are already in the repository (`experiments/toybox_rotation_pilot/batch1/`). Answers live in
-`batch1/answers.json` and are only read when scoring. One call per question and model. GPT-6 Luna has already been run (results in `batch1/results/`); this run calls
+`batch1/answers.json` and are only read when scoring. One call per question and model. GPT-6 Luna has already been run (results in `batch1/model_outputs/`); this run calls
 `meta/muse-glimmer-30b` (60 calls; Muse reasons at length, so expect roughly $1-3). Re-running
 skips questions that already have a successful response.
 
@@ -81,7 +81,7 @@ sys.path.insert(0, str(PILOT))
 from eval_batch import score
 pd.set_option("display.width", 200); pd.set_option("display.max_colwidth", 70)
 frames = []
-for f in sorted(glob.glob(str(BATCH / "responses_*.jsonl")) + glob.glob(str(BATCH / "results" / "responses_*.jsonl"))):
+for f in sorted(glob.glob(str(BATCH / "responses_*.jsonl")) + glob.glob(str(BATCH / "model_outputs" / "responses_*.jsonl"))):
     m = pathlib.Path(f).stem.replace("responses_", "")
     if any(d.model == m for d in frames):
         continue
