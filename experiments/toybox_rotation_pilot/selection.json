@@ -1,0 +1,29 @@
+{
+  "note": "Frames chosen by visual inspection of timestamped contact sheets; the SIFT angle estimate (angle.py) was used as a check where it was reliable. Orientations are approximate (manual rotation by a person, head-mounted camera).",
+  "transformation": "approximately 90 degrees counter-clockwise in-plane rotation (as seen in the image)",
+  "image_width": 768,
+  "demos": [
+    {"object": "car_18", "video": "vehicles/car_18_pivothead/car_18_pivothead_ryminus.mp4",
+     "before_frame": 0, "after_frame": 108,
+     "before_orientation_deg_ccw": 0, "after_orientation_deg_ccw": 90,
+     "check": "visual: upright -> roof pointing left, wheels right; SIFT unreliable (<=5 inliers)"},
+    {"object": "truck_28", "video": "vehicles/truck_28_pivothead/truck_28_pivothead_ryminus.mp4",
+     "before_frame": 72, "after_frame": 165,
+     "before_orientation_deg_ccw": 90, "after_orientation_deg_ccw": 180,
+     "check": "visual: vertical with wheels right and tow hook up -> upside down; before frame is tilted by roughly 10-15 degrees; SIFT unreliable"},
+    {"object": "duck_12", "video": "animals/duck_12_pivothead/duck_12_pivothead_ryminus.mp4",
+     "before_frame": 216, "after_frame": 300,
+     "before_orientation_deg_ccw": 180, "after_orientation_deg_ccw": 270,
+     "check": "visual: upside down with head right -> vertical with head up; not SIFT-checked"}
+  ],
+  "query": {"object": "truck_24", "video": "vehicles/truck_24_pivothead/truck_24_pivothead_ryminus.mp4",
+            "frame": 0, "orientation_deg_ccw": 0},
+  "candidates": [
+    {"frame": 330, "intended_rotation_deg_ccw": 0,   "sift_estimate_deg": -2},
+    {"frame": 84,  "intended_rotation_deg_ccw": 90,  "sift_estimate_deg": 93},
+    {"frame": 174, "intended_rotation_deg_ccw": 180, "sift_estimate_deg": 179},
+    {"frame": 255, "intended_rotation_deg_ccw": 270, "sift_estimate_deg": 273}
+  ],
+  "correct_rotation_deg_ccw": 90,
+  "shuffle_seed": 0
+}

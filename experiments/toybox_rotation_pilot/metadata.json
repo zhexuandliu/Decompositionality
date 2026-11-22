@@ -1,0 +1,92 @@
+{
+  "dataset": "Toybox (Wang et al. 2018), https://aivaslab.github.io/toybox/ ; videos from the Zenodo archives (vehicles: record 1290757, animals: record 1289936), streamed and only the needed files kept",
+  "intended_transformation": "approximately 90 degrees counter-clockwise in-plane rotation (as seen in the image)",
+  "labeling": "approximate, visually checked pilot question; NOT calibrated geometric ground truth. Frames chosen by visual inspection of timestamped contact sheets; the SIFT angle estimate (angle.py) was used as a check where it was reliable. Orientations are approximate (manual rotation by a person, head-mounted camera).",
+  "fps": {
+    "car_18": 29.97,
+    "truck_28": 29.97,
+    "duck_12": 29.97,
+    "truck_24": 29.97
+  },
+  "demos": [
+    {
+      "object": "car_18",
+      "video": "vehicles/car_18_pivothead/car_18_pivothead_ryminus.mp4",
+      "before_frame": 0,
+      "after_frame": 108,
+      "before_orientation_deg_ccw": 0,
+      "after_orientation_deg_ccw": 90,
+      "check": "visual: upright -> roof pointing left, wheels right; SIFT unreliable (<=5 inliers)",
+      "before_time_s": 0.0,
+      "after_time_s": 3.6
+    },
+    {
+      "object": "truck_28",
+      "video": "vehicles/truck_28_pivothead/truck_28_pivothead_ryminus.mp4",
+      "before_frame": 72,
+      "after_frame": 165,
+      "before_orientation_deg_ccw": 90,
+      "after_orientation_deg_ccw": 180,
+      "check": "visual: vertical with wheels right and tow hook up -> upside down; before frame is tilted by roughly 10-15 degrees; SIFT unreliable",
+      "before_time_s": 2.4,
+      "after_time_s": 5.51
+    },
+    {
+      "object": "duck_12",
+      "video": "animals/duck_12_pivothead/duck_12_pivothead_ryminus.mp4",
+      "before_frame": 216,
+      "after_frame": 300,
+      "before_orientation_deg_ccw": 180,
+      "after_orientation_deg_ccw": 270,
+      "check": "visual: upside down with head right -> vertical with head up; not SIFT-checked",
+      "before_time_s": 7.21,
+      "after_time_s": 10.01
+    }
+  ],
+  "query": {
+    "object": "truck_24",
+    "video": "vehicles/truck_24_pivothead/truck_24_pivothead_ryminus.mp4",
+    "frame": 0,
+    "orientation_deg_ccw": 0,
+    "time_s": 0.0
+  },
+  "candidate_shuffle_seed": 0,
+  "candidates_in_presented_order": [
+    {
+      "letter": "A",
+      "frame": 174,
+      "intended_rotation_deg_ccw": 180,
+      "sift_estimate_deg": 179,
+      "time_s": 5.81
+    },
+    {
+      "letter": "B",
+      "frame": 330,
+      "intended_rotation_deg_ccw": 0,
+      "sift_estimate_deg": -2,
+      "time_s": 11.01
+    },
+    {
+      "letter": "C",
+      "frame": 84,
+      "intended_rotation_deg_ccw": 90,
+      "sift_estimate_deg": 93,
+      "time_s": 2.8
+    },
+    {
+      "letter": "D",
+      "frame": 255,
+      "intended_rotation_deg_ccw": 270,
+      "sift_estimate_deg": 273,
+      "time_s": 8.51
+    }
+  ],
+  "intended_answer": "C",
+  "uncertainty": [
+    "Rotations are performed by hand; angles are approximate (roughly +-15 degrees).",
+    "Toybox uses a head-mounted camera; the camera may move slightly between frames.",
+    "The truck_28 'before' frame is tilted by roughly 10-15 degrees from vertical.",
+    "Hands partly occlude the objects; hand positions differ between frames.",
+    "Some rotation may be slightly out of plane."
+  ]
+}
