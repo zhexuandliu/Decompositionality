@@ -1,0 +1,9 @@
+{
+  "note": "Visually checked keyframes at roughly 0/90/180/270 degrees counter-clockwise relative to the first frame of each Toybox ry video (proposed by orient.py, checked on contact sheets; tilted frames removed). Approximate: about +-15 degrees.",
+  "objects": {
+    "car_18":   {"video": "car_18_pivothead_ryminus.mp4",   "frames": {"0": [0, 315, 614], "90": [108], "180": [186, 447], "270": [248, 506]}},
+    "truck_24": {"video": "truck_24_pivothead_ryminus.mp4", "frames": {"0": [0, 333, 618], "90": [81, 402], "180": [174, 465], "270": [255, 534]}},
+    "truck_28": {"video": "truck_28_pivothead_ryminus.mp4", "frames": {"0": [0], "90": [72], "180": [165], "270": [252]}},
+    "duck_12":  {"video": "duck_12_pivothead_ryminus.mp4",  "frames": {"0": [0, 357, 632], "90": [138, 423], "180": [216, 518], "270": [300, 590]}}
+  }
+}

@@ -68,3 +68,33 @@ python build_question.py --videos videos
 # 3. the single evaluation call (in Colab: notebooks/53_toybox_rotation_pilot.ipynb)
 OPENROUTER_API_KEY=... python eval_once.py
 ```
+
+## Batch 1: 30 questions (rotation / translation / rotation + translation)
+
+Built by `make_questions.py` from `keyframes.json`. The keyframes are visually checked frames at about
+0/90/180/270° for each object, proposed by `orient.py` (accumulated SIFT tracking).
+
+| task | n | transformation | candidates |
+|---|---|---|---|
+| `R00-R09` | 10 | rotation by +90° (counter-clockwise), −90° or 180°, from recorded frames | 0 / 90 / 180 / 270° |
+| `T00-T09` | 10 | shift left / right / up / down | the four directions |
+| `RT00-RT09` | 10 | ±90° rotation plus a shift | correct; rotation only; shift only; wrong rotation direction + shift |
+
+* **Framing.** Every image is a 1344×756 crop of a recorded 1920×1080 frame, resized to 768 px wide. Only
+  `make_questions.py` defines the crop.
+* **Translations.** Made by moving the crop window, which is equivalent to the camera panning. The object moves
+  240 px horizontally or 150 px vertically in the original frame (18% / 20% of the crop). Large objects (the
+  garbage truck) can be partly cut off after a shift.
+* **Objects.** Only 4 objects (`car_18`, `truck_24`, `truck_28`, `duck_12`), so every question uses all four.
+  The query object is always different from the three demonstration objects.
+* **Rotations.** Orientations are approximate (about ±15°).
+* **"Shift only" candidate in RT.** Uses a different recorded frame at the query orientation when one exists;
+  otherwise it uses the query frame itself.
+* **Files.** Answers are in `batch1/answers.json`, which is only read when scoring.
+
+Rebuild and evaluate:
+
+```bash
+python make_questions.py --videos videos --out batch1 --seed 0
+OPENROUTER_API_KEY=... python eval_batch.py --batch batch1      # or notebooks/54_toybox_batch1.ipynb in Colab
+```
