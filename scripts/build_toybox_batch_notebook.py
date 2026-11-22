@@ -1,4 +1,4 @@
-"""Generate notebooks/54_toybox_batch1.ipynb: GPT-6 Luna on 30 Toybox questions (rotation / translation / both)."""
+"""Generate notebooks/55_toybox_batch1_muse.ipynb: GPT-6 Luna on 30 Toybox questions (rotation / translation / both)."""
 from __future__ import annotations
 
 import sys
@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebooks import BOOTSTRAP  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "54_toybox_batch1.ipynb"
+NAME = "55_toybox_batch1_muse.ipynb"
 
-INTRO = """# Toybox batch 1 — 60 questions, `openai/gpt-6-luna`
+INTRO = """# Toybox batch 1 — 60 questions, `meta/muse-glimmer-30b` (GPT-6 Luna results already in the repo)
 
 Same format and prompt as the single pilot question (notebook 53): 3 before/after demonstrations of 3 different
 objects, 1 query image of a 4th object, 4 candidates, "Answer with exactly one letter".
@@ -66,7 +66,7 @@ if IN_COLAB and not os.environ.get("OPENROUTER_API_KEY"):
 # model -> output-token cap (None = provider default). Muse reasons for a long time and its provider default (16384)
 # truncated answers in notebook 52, so it gets a larger cap.
 MODELS = {"openai/gpt-6-luna": None, "meta/muse-glimmer-30b": 48000}
-RUN = ["meta/muse-glimmer-30b"]          # which models to call now (Luna was already run: results in batch1/results/)
+RUN = ["meta/muse-glimmer-30b"]          # only Muse is called; Luna's results (notebook 54) are in batch1/results/
 for MODEL in RUN:
     cmd = [sys.executable, str(PILOT / "eval_batch.py"), "--batch", str(BATCH), "--model", MODEL, "--workers", "8"]
     if MODELS[MODEL]:
