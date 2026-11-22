@@ -69,6 +69,7 @@ def main():
     ap.add_argument("--batch", default=HERE / "batch1", type=Path)
     ap.add_argument("--model", default="openai/gpt-6-luna")
     ap.add_argument("--workers", default=8, type=int)
+    ap.add_argument("--limit", default=None, type=int, help="call at most this many new questions (pilot)")
     ap.add_argument("--max-tokens", default=None, type=int,
                     help="output cap; some providers default to 16384, which truncates long-reasoning models")
     a = ap.parse_args()
@@ -86,6 +87,8 @@ def main():
                 done.add(r["qid"])
     qids = sorted(p.name for p in a.batch.iterdir() if (p / "inputs.json").exists())
     todo = [q for q in qids if q not in done]
+    if a.limit is not None:
+        todo = todo[:a.limit]
     print(f"{len(done)} done, {len(todo)} to call ({a.model})")
     lock = threading.Lock()
 

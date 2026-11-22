@@ -1,4 +1,4 @@
-"""Generate notebooks/55_toybox_batch1_muse.ipynb: GPT-6 Luna on 30 Toybox questions (rotation / translation / both)."""
+"""Generate notebooks/56_toybox_batch1_astra.ipynb (55 = Muse, kept as run): GPT-6 Luna on 30 Toybox questions (rotation / translation / both)."""
 from __future__ import annotations
 
 import sys
@@ -10,9 +10,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from build_notebooks import BOOTSTRAP  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-NAME = "55_toybox_batch1_muse.ipynb"
+NAME = "56_toybox_batch1_astra.ipynb"
 
-INTRO = """# Toybox batch 1 — 60 questions, `meta/muse-glimmer-30b` (GPT-6 Luna results already in the repo)
+INTRO = """# Toybox batch 1 — 60 questions, `openai/gpt-6.2-astra` (GPT-6 Luna and Muse Glimmer results already in the repo)
 
 Same format and prompt as the single pilot question (notebook 53): 3 before/after demonstrations of 3 different
 objects, 1 query image of a 4th object, 4 candidates, "Answer with exactly one letter".
@@ -27,8 +27,9 @@ objects, 1 query image of a 4th object, 4 candidates, "Answer with exactly one l
 | `TM` translation + mirror | 10 | left-right mirror plus a shift | correct, mirror only, shift only, top-bottom mirror + shift |
 
 The questions are already in the repository (`experiments/toybox_rotation_pilot/batch1/`). Answers live in
-`batch1/answers.json` and are only read when scoring. One call per question and model. GPT-6 Luna has already been run (results in `batch1/model_outputs/`); this run calls
-`meta/muse-glimmer-30b` (60 calls; Muse reasons at length, so expect roughly $1-3). Re-running
+`batch1/answers.json` and are only read when scoring. One call per question. GPT-6 Luna and Muse Glimmer have already been run (results in `batch1/model_outputs/`).
+This notebook calls `openai/gpt-6.2-astra` ($8 / $40 per 1M input / output tokens): cell 5 is a 2-question pilot that
+prints the real token use and the projected cost of all 60; cell 6 runs the rest (estimated $5-15). Re-running
 skips questions that already have a successful response.
 
 Needs the Colab secrets `GITHUB_TOKEN` and `OPENROUTER_API_KEY` (never printed).
@@ -59,20 +60,34 @@ for qid in ["R00", "T00", "RT00", "M00", "RM00", "TM00"]:
     print(qid); display(_Img(filename=str(BATCH / qid / "composite.jpg"), width=900))
 '''
 
-CALL = r'''# --- 5. Calls: one per question and model (resumable) -----------------------------------------------------------------
+CALL = r'''# --- 5. Pilot: 2 questions with Astra, then the projected cost of all 60 ----------------------------------------------
 if IN_COLAB and not os.environ.get("OPENROUTER_API_KEY"):
     from google.colab import userdata
     os.environ["OPENROUTER_API_KEY"] = userdata.get("OPENROUTER_API_KEY")      # never printed
-# model -> output-token cap (None = provider default). Muse reasons for a long time and its provider default (16384)
-# truncated answers in notebook 52, so it gets a larger cap.
-MODELS = {"openai/gpt-6-luna": None, "meta/muse-glimmer-30b": 48000}
-RUN = ["meta/muse-glimmer-30b"]          # only Muse is called; Luna's results (notebook 54) are in batch1/results/
-for MODEL in RUN:
-    cmd = [sys.executable, str(PILOT / "eval_batch.py"), "--batch", str(BATCH), "--model", MODEL, "--workers", "8"]
-    if MODELS[MODEL]:
-        cmd += ["--max-tokens", str(MODELS[MODEL])]
+import json
+MODEL = "openai/gpt-6.2-astra"
+MAX_TOKENS = 48000                     # generous cap so long reasoning is not truncated
+PRICE_IN, PRICE_OUT = 8 / 1e6, 40 / 1e6
+def run(limit=None):
+    cmd = [sys.executable, str(PILOT / "eval_batch.py"), "--batch", str(BATCH), "--model", MODEL, "--workers", "8",
+           "--max-tokens", str(MAX_TOKENS)] + (["--limit", str(limit)] if limit else [])
     r = subprocess.run(cmd, capture_output=True, text=True, cwd=str(PILOT))
-    print(f"===== {MODEL}"); print(r.stdout[-6000:]); print(r.stderr[-3000:])
+    print(r.stdout[-6000:]); print(r.stderr[-3000:])
+run(limit=2)
+recs = [json.loads(l) for l in (BATCH / f"responses_{MODEL.replace('/', '_')}.jsonl").read_text().splitlines()]
+ok = [r for r in recs if r.get("error") is None and r.get("usage")]
+for r in ok:
+    u = r["usage"]
+    print(r["qid"], "answer:", repr(r["raw_response"]), "| prompt", u.get("prompt_tokens"), "completion", u.get("completion_tokens"),
+          "| cost $", u.get("cost"), "| finish", r.get("finish_reason"))
+if ok:
+    pin = sum(r["usage"]["prompt_tokens"] for r in ok) / len(ok); pout = sum(r["usage"]["completion_tokens"] for r in ok) / len(ok)
+    print(f"\\nprojected cost of 60 questions: ${60 * (pin * PRICE_IN + pout * PRICE_OUT):.2f}"
+          f"  (mean {pin:.0f} input / {pout:.0f} output tokens per question)")
+'''
+
+FULL = r'''# --- 6. Full run (resumable: the pilot questions are skipped) --------------------------------------------------------
+run()
 '''
 
 REPORT = r'''# --- 6. Results (all models with responses) and download ------------------------------------------------------------
@@ -116,7 +131,7 @@ def build() -> Path:
     nb.metadata = {"colab": {"provenance": []}, "kernelspec": {"display_name": "Python 3", "language": "python",
                                                               "name": "python3"}, "language_info": {"name": "python"}}
     nb.cells = [nbf.v4.new_markdown_cell(INTRO), nbf.v4.new_code_cell(BOOTSTRAP), nbf.v4.new_code_cell(PULL),
-                nbf.v4.new_code_cell(SHOW), nbf.v4.new_code_cell(CALL), nbf.v4.new_code_cell(REPORT)]
+                nbf.v4.new_code_cell(SHOW), nbf.v4.new_code_cell(CALL), nbf.v4.new_code_cell(FULL), nbf.v4.new_code_cell(REPORT)]
     nbf.validate(nb)
     nbf.write(nb, p)
     return p
