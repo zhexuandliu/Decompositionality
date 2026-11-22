@@ -95,11 +95,12 @@ import pandas as pd, shutil, glob
 sys.path.insert(0, str(PILOT))
 from eval_batch import score
 pd.set_option("display.width", 200); pd.set_option("display.max_colwidth", 70)
-frames = []
+frames, seen = [], set()
 for f in sorted(glob.glob(str(BATCH / "responses_*.jsonl")) + glob.glob(str(BATCH / "model_outputs" / "responses_*.jsonl"))):
     m = pathlib.Path(f).stem.replace("responses_", "")
-    if any(d.model == m for d in frames):
+    if m in seen:                       # a model's fresh responses (batch1/) take precedence over the saved copy
         continue
+    seen.add(m)
     d = score(BATCH, pathlib.Path(f)); d["model"] = m; frames.append(d)
 df = pd.concat(frames, ignore_index=True)
 df["task"] = df.qid.str.rstrip("0123456789")
