@@ -1,0 +1,49 @@
+{
+  "prompt": "The three example pairs show the same transformation applied to different objects. Infer the shared transformation from the examples, then apply it to the query image. Which candidate shows the result? Answer with exactly one letter: A, B, C, or D.",
+  "images_in_order": [
+    {
+      "label": "Example 1 - Before",
+      "file": "images/demo1_before.jpg"
+    },
+    {
+      "label": "Example 1 - After",
+      "file": "images/demo1_after.jpg"
+    },
+    {
+      "label": "Example 2 - Before",
+      "file": "images/demo2_before.jpg"
+    },
+    {
+      "label": "Example 2 - After",
+      "file": "images/demo2_after.jpg"
+    },
+    {
+      "label": "Example 3 - Before",
+      "file": "images/demo3_before.jpg"
+    },
+    {
+      "label": "Example 3 - After",
+      "file": "images/demo3_after.jpg"
+    },
+    {
+      "label": "Query",
+      "file": "images/query.jpg"
+    },
+    {
+      "label": "Candidate A",
+      "file": "images/candidate_A.jpg"
+    },
+    {
+      "label": "Candidate B",
+      "file": "images/candidate_B.jpg"
+    },
+    {
+      "label": "Candidate C",
+      "file": "images/candidate_C.jpg"
+    },
+    {
+      "label": "Candidate D",
+      "file": "images/candidate_D.jpg"
+    }
+  ]
+}

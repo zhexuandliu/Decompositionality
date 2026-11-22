@@ -6,14 +6,17 @@ from pathlib import Path
 
 batch = Path(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).resolve().parent / "batch1")
 a = json.loads((batch / "answers.json").read_text())["questions"]
-names = {"rotation": "Rotation", "translation": "Translation", "rotation+translation": "Rotation + translation"}
+names = {"rotation": "Rotation", "translation": "Translation", "rotation+translation": "Rotation + translation",
+         "mirror": "Mirror", "rotation+mirror": "Rotation then mirror", "translation+mirror": "Translation + mirror"}
 ROT = {90: "rotate 90° counter-clockwise", -90: "rotate 90° clockwise", 180: "rotate 180°"}
 
 
 def rule(q):
     r = q["rule"]
     s = [ROT[r["rotation_deg_ccw"]]] if "rotation_deg_ccw" in r else []
-    return " + ".join(s + (["move " + r["move"]] if "move" in r else []))
+    s += ["move " + r["move"]] if "move" in r else []
+    s += ["then mirror left-right"] if "then" in r else (["mirror left-right"] if "mirror" in r else [])
+    return " + ".join(s)
 
 
 cards = []

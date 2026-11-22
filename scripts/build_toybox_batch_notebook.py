@@ -12,7 +12,7 @@ from build_notebooks import BOOTSTRAP  # noqa: E402
 ROOT = Path(__file__).resolve().parents[1]
 NAME = "54_toybox_batch1.ipynb"
 
-INTRO = """# Toybox batch 1 — 30 questions, `openai/gpt-6-luna`
+INTRO = """# Toybox batch 1 — 60 questions, `openai/gpt-6-luna`
 
 Same format and prompt as the single pilot question (notebook 53): 3 before/after demonstrations of 3 different
 objects, 1 query image of a 4th object, 4 candidates, "Answer with exactly one letter".
@@ -22,9 +22,12 @@ objects, 1 query image of a 4th object, 4 candidates, "Answer with exactly one l
 | `R` rotation | 10 | 90° counter-clockwise, 90° clockwise or 180°, from recorded frames | 0 / 90 / 180 / 270° |
 | `T` translation | 10 | left / right / up / down (crop-window shift = camera pan) | the 4 directions |
 | `RT` rotation + translation | 10 | ±90° rotation (recorded) plus a shift | correct, rotation only, translation only, wrong rotation direction + shift |
+| `M` mirror | 10 | left-right mirror (digital flip) about the object's own axis | correct, top-bottom mirror, rotate 180°, unchanged |
+| `RM` rotation then mirror | 10 | ±90° rotation (recorded) then left-right mirror | correct, rotation only, mirror only, wrong order |
+| `TM` translation + mirror | 10 | left-right mirror plus a shift | correct, mirror only, shift only, top-bottom mirror + shift |
 
 The questions are already in the repository (`experiments/toybox_rotation_pilot/batch1/`). Answers live in
-`batch1/answers.json` and are only read when scoring. One call per question (30 calls, about 2-3 cents). Re-running
+`batch1/answers.json` and are only read when scoring. One call per question (60 calls, about 5 cents). Re-running
 skips questions that already have a successful response.
 
 Needs the Colab secrets `GITHUB_TOKEN` and `OPENROUTER_API_KEY` (never printed).
@@ -51,7 +54,7 @@ print("batch folder:", PILOT / "batch1")
 SHOW = r'''# --- 4. One example question (composites are for viewing only; they are not sent) -----------------------------
 from IPython.display import Image as _Img, display
 BATCH = PILOT / "batch1"
-for qid in ["R00", "T00", "RT00"]:
+for qid in ["R00", "T00", "RT00", "M00", "RM00", "TM00"]:
     print(qid); display(_Img(filename=str(BATCH / qid / "composite.jpg"), width=900))
 '''
 

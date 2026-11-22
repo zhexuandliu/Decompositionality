@@ -69,16 +69,30 @@ python build_question.py --videos videos
 OPENROUTER_API_KEY=... python eval_once.py
 ```
 
-## Batch 1: 30 questions (rotation / translation / rotation + translation)
+## Batch 1: 60 questions (R, T, RT, M, RM, TM; 10 each)
 
 Built by `make_questions.py` from `keyframes.json`, the visually checked keyframes at about 0/90/180/270° per object.
 `orient.py` (accumulated SIFT tracking) proposes keyframes; they are manually chosen when the tracker drifts.
 
-| task | n | transformation | candidates | objects | crop / shift |
-|---|---|---|---|---|---|
-| `R00-R09` | 10 | rotation by +90° (counter-clockwise), −90° or 180°, from recorded frames | 0 / 90 / 180 / 270° | car_18, truck_24, truck_28, duck_12 | 1344×756 |
-| `T00-T09` | 10 | shift left / right / up / down | the four directions | same | 1344×756; 240 px / 150 px |
-| `RT00-RT09` | 10 | ±90° rotation plus a shift | correct; rotation only; shift only; wrong rotation direction + shift | truck_20, car_21, truck_28, duck_12 | 1344×756; 330 px / 210 px |
+| task | transformation | candidates | objects | crop / shift (frame px) |
+|---|---|---|---|---|
+| `R` | rotation by +90° (counter-clockwise), −90° or 180°, from recorded frames | 0 / 90 / 180 / 270° | car_18, truck_24, truck_28, duck_12 | 1344×756 |
+| `T` | shift left / right / up / down | the four directions | same | 1344×756; 240 / 150 |
+| `RT` | ±90° rotation plus a shift | correct; rotation only; shift only; wrong rotation direction + shift | truck_20, car_21, truck_28, duck_12 | 1344×756; 330 / 210 |
+| `M` | left-right mirror about the object's own vertical axis | mirror left-right (correct); mirror top-bottom; rotate 180° (recorded); unchanged (another recorded frame) | same as RT | 1344×756 |
+| `RM` | ±90° rotation (recorded), then left-right mirror | correct; rotation only; mirror only; other rotation direction + mirror | same as RT | 1344×756 |
+| `TM` | left-right mirror plus a shift | correct; mirror only; shift only; top-bottom mirror + shift | same as RT | 1344×756; 330 / 210 |
+
+**Mirrors are digital.** A rigid toy cannot be turned into its mirror image, so the mirrors are left-right (or
+top-bottom) flips of the crop.
+* A mirrored image also mirrors the hands, and the text on `truck_20`. These are genuine consequences of a mirror,
+  not artefacts.
+* A top-bottom flip puts the hands at the top of the image, which makes that distractor easier to reject.
+* In RM, "other rotation direction + mirror" equals "mirror first, then the correct rotation": rotation and mirror do
+  not commute, so this distractor is the wrong-order composition.
+
+**Balancing.** For M, RM and TM the correct letter is balanced across A–D (2–3 each), and no two questions of a task
+share a query frame.
 
 Every question records its own crop, shift, objects and seed in `answers.json` (`config`).
 
@@ -102,7 +116,7 @@ Every question records its own crop, shift, objects and seed in `answers.json` (
     The query object always differs from the three demonstration objects.
   * `car_21` is a clockwise (`ryplus`) video; its keyframes are still labelled counter-clockwise from frame 0.
 * **Rotations.** Orientations are approximate (about ±15°).
-* **Checks.** All 30 composites were inspected: rotation direction and shift direction are consistent within each
+* **Checks.** All 60 composites were inspected: rotation direction and shift direction are consistent within each
   question, the intended answer is right, and the four candidates differ visibly. Several questions were also
   checked numerically from the crop origins.
 * **Viewer and answers.** `batch1/viewer.html` shows all questions with answers hidden (`python make_viewer.py`).
